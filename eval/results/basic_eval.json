@@ -1,0 +1,77 @@
+{
+  "avg_recall_at_5": 0.2,
+  "avg_relevance": 0.262,
+  "num_queries": 5,
+  "config": {
+    "top_k": 5,
+    "k_candidates": 20,
+    "use_reranker": false
+  },
+  "per_query_results": [
+    {
+      "query_id": 1,
+      "question": "What are the main types of structural breaks in time series?",
+      "recall_at_5": 0.2,
+      "avg_relevance": 0.4,
+      "top_sources": [
+        "BaiPerron_2003_Reference.md",
+        "Hyndman_FPP3_Reference.md",
+        "Hyndman_FPP3_Reference.md",
+        "Google_Correlate.pdf",
+        "ZhuShasha_StatStream.pdf"
+      ]
+    },
+    {
+      "query_id": 2,
+      "question": "How do regime-switching models work for forecasting?",
+      "recall_at_5": 0.8,
+      "avg_relevance": 0.286,
+      "top_sources": [
+        "Timmermann_ModelInstability.pdf",
+        "Timmermann_ModelInstability.pdf",
+        "TaylorLetham_Prophet.pdf",
+        "Lim_TemporalFusionTransformers.pdf",
+        "Timmermann_ModelInstability.pdf"
+      ]
+    },
+    {
+      "query_id": 3,
+      "question": "What evaluation metrics are appropriate for break-aware forecasting?",
+      "recall_at_5": 0.0,
+      "avg_relevance": 0.1,
+      "top_sources": [
+        "Hyndman_FPP3_Reference.md",
+        "Hyndman_FPP3_Reference.md",
+        "Timmermann_ModelInstability.pdf",
+        "Timmermann_ModelInstability.pdf",
+        "BaiPerron_2003_Reference.md"
+      ]
+    },
+    {
+      "query_id": 4,
+      "question": "What are the governance considerations for deploying break detection systems?",
+      "recall_at_5": 0.0,
+      "avg_relevance": 0.24,
+      "top_sources": [
+        "Hyndman_FPP3_Reference.md",
+        "BaiPerron_2003_Reference.md",
+        "Lim_TemporalFusionTransformers.pdf",
+        "Hyndman_FPP3_Reference.md",
+        "ZhuShasha_StatStream.pdf"
+      ]
+    },
+    {
+      "query_id": 5,
+      "question": "How does nowcasting adapt to macroeconomic shocks?",
+      "recall_at_5": 0.0,
+      "avg_relevance": 0.286,
+      "top_sources": [
+        "Timmermann_ModelInstability.pdf",
+        "Timmermann_ModelInstability.pdf",
+        "Timmermann_ModelInstability.pdf",
+        "Timmermann_ModelInstability.pdf",
+        "Timmermann_ModelInstability.pdf"
+      ]
+    }
+  ]
+}
