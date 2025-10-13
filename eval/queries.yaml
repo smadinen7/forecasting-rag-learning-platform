@@ -1,0 +1,48 @@
+# Sample queries for evaluation
+# Each query has a question and expected keyword list for recall@5 proxy
+
+queries:
+  - id: 1
+    question: "What are the main types of structural breaks in time series?"
+    keywords:
+      - "level shift"
+      - "trend break"
+      - "volatility"
+      - "regime"
+      - "coefficient"
+    
+  - id: 2
+    question: "How do regime-switching models work for forecasting?"
+    keywords:
+      - "markov"
+      - "regime"
+      - "switching"
+      - "hamilton"
+      - "probability"
+    
+  - id: 3
+    question: "What evaluation metrics are appropriate for break-aware forecasting?"
+    keywords:
+      - "regime-conditional"
+      - "rmse"
+      - "break-adjusted"
+      - "coverage"
+      - "robustness"
+    
+  - id: 4
+    question: "What are the governance considerations for deploying break detection systems?"
+    keywords:
+      - "monitoring"
+      - "audit"
+      - "stakeholder"
+      - "transparency"
+      - "accountability"
+    
+  - id: 5
+    question: "How does nowcasting adapt to macroeconomic shocks?"
+    keywords:
+      - "high-frequency"
+      - "mixed-frequency"
+      - "real-time"
+      - "dynamic factor"
+      - "pandemic"
