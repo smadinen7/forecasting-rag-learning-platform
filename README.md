@@ -164,19 +164,44 @@ Output: `eval/results/llm_judge_eval.json` + `.jsonl`
 
 ## 🗂️ Adding Sources
 
-1. **Markdown/Text**: Drop `.md` or `.txt` files into `data/`
-2. **PDFs**: Add small PDFs (<30MB) to `data/`
-3. **Metadata**: Include YAML frontmatter:
+### ⚠️ Important: Current Data is Placeholder
+The current `data/*.md` files are **generated placeholders** for testing the system. Per **Assignment Step 3**, you must:
+
+1. **Search for real sources** (see `docs/STEP3_SEARCH_GUIDE.md`)
+2. **Collect 10-15 quality sources**: papers, reports, blogs, videos
+3. **Download and save** to `data/` directory
+4. **Document in** `docs/sources.csv`
+5. **Replace placeholder files** with real content
+
+### Adding Real Sources
+
+1. **Academic Papers (PDF)**: 
+   - Download from Google Scholar, arXiv, SSRN
+   - Save as `data/AuthorYear_ShortTitle.pdf`
+   
+2. **Reports/Blogs (Markdown)**:
+   - Save web content as `.md` files
+   - Extract key sections, preserve source attribution
+   
+3. **Books/Chapters**:
+   - Extract relevant chapters (respect copyright)
+   - Save as `.txt` or `.md`
+
+4. **Metadata** (optional): Include YAML frontmatter:
    ```yaml
    ---
    title: "Document Title"
    source: "Author/Organization"
-   type: "Tutorial | Research | Case Study"
+   type: "Academic Paper | Report | Tutorial"
    relevance: "Core | Advanced | Reference"
    ---
    ```
-4. **Re-ingest**: Run `make ingest` to rebuild index
-5. **Document**: Add entry to `docs/sources_template.csv`
+
+5. **Re-ingest**: Run `make ingest` to rebuild index
+
+6. **Document**: Update `docs/sources.csv` with all sources
+
+**See `docs/STEP3_SEARCH_GUIDE.md` for detailed instructions.**
 
 ---
 

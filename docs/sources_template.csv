@@ -1,1 +1,3 @@
-Title,URL,Type,Relevance
+Title,URL,Type,Relevance,Notes
+"Example: The Great Crash, the Oil Price Shock, and the Unit Root Hypothesis",https://doi.org/10.2307/1913712,Academic Paper,Core,"Perron 1989 - foundational work on structural breaks"
+"Example: Nowcasting the COVID-19 Pandemic",https://www.federalreserve.gov/econres/notes/feds-notes/nowcasting-the-covid-19-pandemic-20200515.htm,Report,Case Study,"Fed Reserve 2020 - real-world application"

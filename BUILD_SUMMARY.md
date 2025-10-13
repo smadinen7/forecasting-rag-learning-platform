@@ -49,16 +49,29 @@ All components built and ready for deployment.
 
 ## 🎯 Assignment Compliance
 
-| Step | Requirement | Implementation |
-|------|-------------|----------------|
-| 1 | Learning Questions (7) | `docs/learning_questions.md` |
-| 2a | Learning Objectives (5, Bloom) | `docs/objectives.md` |
-| 2b | Platform Features | `docs/features_inspired.md` (Canvas/EducateMe/Valamis) |
-| 3 | Deep Search Corpus | `data/` (3 starter docs + extensible) |
-| 4 | RAG with Citations | `app.py` (Gemini/OpenAI/extractive, [1]-[5] citations) |
-| 5a | Basic Eval | `eval_basic.py` (recall@5, relevance) |
-| 5b | LLM Judge | `eval_judge_llm.py` (4 dimensions, 0-5 scores) |
-| 6 | Reflection | `docs/reflection_template.md` |
+| Step | Requirement | Implementation | Status |
+|------|-------------|----------------|--------|
+| 1 | Learning Questions (7) | `docs/learning_questions.md` | ✅ |
+| 2a | Learning Objectives (5, Bloom) | `docs/objectives.md` | ✅ |
+| 2b | Platform Features | `docs/features_inspired.md` (Canvas/EducateMe/Valamis) | ✅ |
+| 3 | Deep Search Corpus | **⚠️ PLACEHOLDER - Must collect real sources** | 🔄 |
+| 4 | RAG with Citations | `app.py` (Gemini/OpenAI/extractive, [1]-[5] citations) | ✅ |
+| 5a | Basic Eval | `eval_basic.py` (recall@5, relevance) | ✅ |
+| 5b | LLM Judge | `eval_judge_llm.py` (4 dimensions, 0-5 scores) | ✅ |
+| 6 | Reflection | `docs/reflection_template.md` | ✅ |
+
+### ⚠️ Important Note on Step 3
+
+**Current Status**: The `data/*.md` files are **generated placeholders** for testing the system architecture.
+
+**Required Action**: Per Assignment Step 3, you must:
+1. Conduct naive/deep search for **10-15 real sources**
+2. Download and save actual papers, reports, blogs
+3. Document all sources in `docs/sources.csv`
+4. Replace placeholder files with real content
+5. Re-run `make ingest` to rebuild FAISS index
+
+**See**: `docs/STEP3_SEARCH_GUIDE.md` for complete instructions.
 
 ---
 

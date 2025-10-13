@@ -1,0 +1,28 @@
+Title,URL,Type,Relevance,Notes,Status
+Title,URL,Type,Relevance,Notes,Status
+"Cleveland et al. - STL: Seasonal-Trend Decomposition",https://www.wessa.net/download/stl.pdf,Paper,High,"Classic STL decomposition paper - foundational for time series",READY
+"Hyndman & Athanasopoulos - Forecasting: Principles and Practice",https://otexts.com/fpp3/,Book,High,"Free online textbook covering forecasting methods",READY
+"Bai & Perron - Multiple Structural Change Models",https://onlinelibrary.wiley.com/doi/abs/10.1002/jae.659,Paper,High,"Break point detection methodology",READY
+"Zhu & Shasha - StatStream: Statistical Monitoring",https://arxiv.org/pdf/1101.1438,Paper,Medium,"Statistical monitoring of streaming data",READY
+"Timmermann - Forecasting under Model Instability",https://rady.ucsd.edu/_files/faculty-research/timmermann/forecasting-macroeconomic-variables-under-model-instability.pdf,Paper,High,"Macroeconomic forecasting with structural breaks",READY
+"Hyun et al. - Google Correlate Whitepaper",https://research.google.com/pubs/archive/41854.pdf,Report,Medium,"Google's approach to correlation in time series",READY
+"Wickramasuriya et al. - Optimal Forecast Reconciliation",https://robjhyndman.com/papers/MinT.pdf,Paper,High,"Hierarchical forecasting methods",READY
+"Diebold & Mariano - Comparing Forecast Accuracy",https://www.ssc.wisc.edu/~bhansen/718/DieboldMariano1995.pdf,Paper,High,"Standard method for forecast evaluation",READY
+"Taylor & Letham - Facebook Prophet",https://facebook.github.io/prophet/static/prophet_paper_20170113.pdf,Paper,High,"Prophet forecasting model for business time series",READY
+"Oreshkin et al. - N-BEATS Neural Network",https://arxiv.org/pdf/1704.04110,Paper,High,"Deep learning for time series forecasting",READY
+"Lim et al. - Temporal Fusion Transformers",https://arxiv.org/pdf/1912.09363,Paper,High,"Transformer architecture for multi-horizon forecasting",READY
+"Li et al. - Enhancing Time Series Momentum",https://openreview.net/pdf?id=r1ecqn4YwB,Paper,Medium,"ML approach to time series analysis",READY
+"Computation and Analysis of Multiple Structural Change Models","https://doi.org/10.1002/jae.659",Academic Paper,Core,"Bai & Perron 2003 - methodology for detecting multiple breaks",TO_DOWNLOAD
+"A New Approach to the Economic Analysis of Nonstationary Time Series","https://doi.org/10.2307/1912559",Academic Paper,Core,"Hamilton 1989 - Markov-switching models foundation",TO_DOWNLOAD
+"Nowcasting: The Real-Time Informational Content of Macroeconomic Data","https://doi.org/10.1016/j.jmoneco.2008.05.010",Academic Paper,Advanced,"Giannone et al 2008 - nowcasting methods",TO_DOWNLOAD
+"Testing for Unit Roots in Time Series Regression","https://doi.org/10.2307/2336182",Academic Paper,Core,"Dickey-Fuller test - related to break detection",TO_DOWNLOAD
+"Forecasting in the Presence of Structural Breaks and Model Uncertainty","https://www.ecb.europa.eu/pub/pdf/scpwps/ecbwp1128.pdf",Report,Advanced,"ECB Working Paper - practical forecasting guidance",TO_DOWNLOAD
+"Nowcasting the COVID-19 Pandemic","https://www.federalreserve.gov/econres/notes/feds-notes/nowcasting-the-covid-19-pandemic-20200515.htm",Report,Case Study,"Federal Reserve 2020 - COVID nowcasting case",TO_DOWNLOAD
+"Real-Time Nowcasting of GDP: Factor Model versus Professional Forecasters","https://www.imf.org/external/pubs/ft/wp/2013/wp13321.pdf",Report,Advanced,"IMF Working Paper - nowcasting comparison",TO_DOWNLOAD
+"Structural Break Detection in Python","https://www.statsmodels.org/stable/examples/notebooks/generated/stationarity_detrending_adf_kpss.html",Tutorial,Reference,"Statsmodels documentation - practical implementation",TO_DOWNLOAD
+"Regime Switching Models","https://www.quantstart.com/articles/Markov-Switching-Models/",Blog,Reference,"QuantStart tutorial - applied finance perspective",TO_DOWNLOAD
+"Time Series Analysis","https://otexts.com/fpp3/",Book,Reference,"Hyndman & Athanasopoulos - free online textbook ch. on breaks",TO_DOWNLOAD
+"Introduction to Time Series and Forecasting","https://link.springer.com/book/10.1007/978-3-319-29854-2",Book,Core,"Brockwell & Davis - textbook (check library access)",TO_DOWNLOAD
+"","",Academic Paper,Advanced,"SEARCH: Recent papers on 'structural breaks deep learning'",TODO
+"","",Report,Case Study,"SEARCH: Industry reports on 'forecasting under uncertainty'",TODO
+"","",Video/Podcast,Reference,"SEARCH: YouTube lectures on 'regime-switching models'",TODO
