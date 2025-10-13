@@ -10,7 +10,6 @@ from typing import List
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import (
     TextLoader,
-    UnstructuredMarkdownLoader,
     PyPDFLoader,
 )
 from langchain_community.embeddings import HuggingFaceEmbeddings
@@ -34,10 +33,8 @@ def load_documents(data_dir: Path) -> List[Document]:
             
         try:
             if file_path.suffix.lower() in text_exts:
-                if file_path.suffix.lower() == ".md":
-                    loader = UnstructuredMarkdownLoader(str(file_path))
-                else:
-                    loader = TextLoader(str(file_path), encoding="utf-8")
+                # Use TextLoader for both .txt and .md files
+                loader = TextLoader(str(file_path), encoding="utf-8")
                 docs = loader.load()
                 
                 # Add source metadata
