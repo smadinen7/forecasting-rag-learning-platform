@@ -37,11 +37,11 @@ def answer_with_gemini(query: str, context_docs: List[Document]) -> Tuple[str, b
         context_parts = []
         for i, doc in enumerate(context_docs[:config.TOP_K], 1):
             source = doc.metadata.get("source", "Unknown")
-            content = doc.page_content[:500]  # Truncate for token limit
+            content = doc.page_content
             context_parts.append(f"[{i}] Source: {source}\n{content}")
-        
+
         context_str = "\n\n".join(context_parts)
-        
+
         # Construct prompt
         prompt = f"""{config.SYSTEM_PROMPT}
 
@@ -83,7 +83,7 @@ def answer_with_openai(query: str, context_docs: List[Document]) -> Tuple[str, b
         context_parts = []
         for i, doc in enumerate(context_docs[:config.TOP_K], 1):
             source = doc.metadata.get("source", "Unknown")
-            content = doc.page_content[:500]
+            content = doc.page_content
             context_parts.append(f"[{i}] Source: {source}\n{content}")
         
         context_str = "\n\n".join(context_parts)

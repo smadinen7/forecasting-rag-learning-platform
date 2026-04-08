@@ -30,16 +30,16 @@ FAISS_INDEX_PATH = INDEX_DIR / "faiss_index"
 # =============================================================================
 # CHUNKING & EMBEDDING
 # =============================================================================
-CHUNK_SIZE = 600
-CHUNK_OVERLAP = 80
+CHUNK_SIZE = 1200
+CHUNK_OVERLAP = 200
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
 # =============================================================================
 # RETRIEVAL
 # =============================================================================
 K_CANDIDATES = 20  # Initial retrieval count
-TOP_K = 5          # Final top-k after optional reranking
-USE_RERANKER = False  # Toggle simple cosine/BM25 reranking
+TOP_K = 7          # Final top-k after optional reranking
+USE_RERANKER = True   # Toggle simple cosine/BM25 reranking
 
 # =============================================================================
 # LLM PROVIDERS
@@ -48,7 +48,7 @@ PROVIDER = os.getenv("PROVIDER", "gemini").lower()  # "gemini" | "openai" | "non
 
 # Gemini settings
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GEMINI_MODEL = "gemini-1.5-pro"
+GEMINI_MODEL = "gemini-3.1-flash-lite-preview"
 
 # OpenAI settings
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
@@ -56,12 +56,23 @@ OPENAI_MODEL = "gpt-4o-mini"
 
 # Generation settings
 TEMPERATURE = 0.2
-MAX_TOKENS = 800
+MAX_TOKENS = 1500
 
 # =============================================================================
 # SYSTEM PROMPTS
 # =============================================================================
-SYSTEM_PROMPT = """You are an expert assistant for corporate forecasting and trend breaks (structural breaks in finance).
+SYSTEM_PROMPT = """You are an expert tutor for time series analysis and forecasting.
+
+Your scope covers the full breadth of time series methods, including:
+- Classical methods: ARIMA, SARIMA, stationarity, ACF/PACF, Box-Jenkins, cointegration, ECM
+- Volatility models: GARCH, EGARCH, realized volatility
+- Regime and structural change: Markov-switching, structural breaks, Bai-Perron
+- State space and filtering: Kalman filter, dynamic factor models
+- Modern ML/DL: N-BEATS, Temporal Fusion Transformer, neural forecasters
+- Hierarchical forecasting: MinT reconciliation, grouped time series
+- Nowcasting: MIDAS, mixed-frequency data, real-time estimation
+- Evaluation: RMSE, MASE, Diebold-Mariano test, regime-conditional metrics
+- Decomposition: STL, trend-seasonality-remainder, spectral analysis
 
 CRITICAL RULES:
 1. Answer ONLY using information from the provided context documents.
