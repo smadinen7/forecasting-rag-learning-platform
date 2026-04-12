@@ -103,9 +103,9 @@ def garch_diagnostics(result):
     plt.tight_layout()
     plt.show()
     
-    # ARCH LM test on standardized residuals^2
+    # ARCH LM test on standardized residuals (het_arch squares internally)
     print("\nARCH test on standardized residuals:")
-    check_arch_effects(std_resid**2, lags=10)
+    check_arch_effects(std_resid, lags=10)
     
     # Ljung-Box on standardized residuals
     from statsmodels.stats.diagnostic import acorr_ljungbox

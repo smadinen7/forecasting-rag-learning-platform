@@ -114,7 +114,7 @@ Is the series univariate or multivariate?
 │   ├── Long horizon (>100 steps)?
 │   │   └── Neural: N-BEATS, PatchTST (if enough data)
 │   └── Short series (<100 obs)?
-│       └── ETS (auto_arima or ETSModel in statsmodels)
+│       └── ETS (ETSModel with auto-selection in statsmodels)
 └── Multivariate:
     ├── All stationary → VAR(p)
     ├── Cointegrated → VECM
@@ -219,11 +219,18 @@ def ensemble_forecast(series, horizon=12, period=12):
     except Exception as e:
         print(f"ETS failed: {e}")
     
-    # Auto ARIMA
+    # Auto ARIMA — align index with ETS/STL-ARIMA forecasts
     try:
         arima = pm.auto_arima(series, seasonal=True, m=period,
                               suppress_warnings=True, error_action='ignore')
-        forecasts['ARIMA'] = pd.Series(arima.predict(n_periods=horizon))
+        # Build a forecast index consistent with the other methods
+        last_idx = series.index[-1]
+        if isinstance(series.index, pd.DatetimeIndex):
+            freq = pd.infer_freq(series.index)
+            fc_index = pd.date_range(start=last_idx, periods=horizon + 1, freq=freq)[1:]
+        else:
+            fc_index = range(len(series), len(series) + horizon)
+        forecasts['ARIMA'] = pd.Series(arima.predict(n_periods=horizon), index=fc_index)
     except Exception as e:
         print(f"ARIMA failed: {e}")
     
@@ -237,9 +244,13 @@ def ensemble_forecast(series, horizon=12, period=12):
     
     if not forecasts:
         raise ValueError("All models failed")
-    
-    # Simple average
-    df_fc = pd.DataFrame(forecasts)
+
+    # Normalise all forecasts to a common RangeIndex before combining
+    # to avoid NaN misalignment when indices differ across models
+    df_fc = pd.DataFrame(
+        {k: v.values for k, v in forecasts.items()},
+        index=next(iter(forecasts.values())).index
+    )
     ensemble = df_fc.mean(axis=1)
     
     print(f"\nEnsemble of {len(forecasts)} model(s): {list(forecasts.keys())}")
@@ -260,7 +271,6 @@ def regime_aware_forecast(series, horizon=12, period=None):
     3. Forecast forward
     """
     import ruptures as rpt
-    from statsmodels.tsa.statespace.sarimax import SARIMAX
     
     signal = series.values.reshape(-1, 1)
     algo = rpt.Pelt(model="normal", min_size=max(5, len(series)//20)).fit(signal)

@@ -66,13 +66,15 @@ def select_penalty_elbow(series, model="rbf", min_size=5, n_bkps_max=10):
     signal = series.values if isinstance(series, pd.Series) else series
     algo = rpt.Pelt(model=model, min_size=min_size).fit(signal)
     
+    # Use Binseg to get breakpoints at each n, then compute cost via cost object
+    cost_obj = rpt.costs.cost_factory(model=model)().fit(signal)
     costs = []
     for n in range(1, n_bkps_max + 1):
         bkps = rpt.Binseg(model=model).fit_predict(signal, n_bkps=n)
-        cost = rpt.costs.cost_factory(model=model)(signal)
-        # Use Binseg to compute cost at each n
-        costs.append((n, sum(cost(signal[s:e]) for s, e in
-                             rpt.utils.pairwise([0] + bkps))))
+        boundaries = [0] + bkps
+        total = sum(cost_obj.error(boundaries[i], boundaries[i+1])
+                    for i in range(len(boundaries) - 1))
+        costs.append((n, total))
     
     ns, cs = zip(*costs)
     plt.figure(figsize=(8, 4))
@@ -111,7 +113,7 @@ def chow_test(series, break_date):
     rss2     = np.sum((y2 - y2.mean()) ** 2)
     rss_split = rss1 + rss2
     
-    k = 2  # number of parameters (mean + variance)
+    k = 1  # number of regression parameters (intercept-only model)
     F = ((rss_full - rss_split) / k) / (rss_split / (n - 2*k))
     p_value = 1 - stats.f.cdf(F, dfn=k, dfd=n - 2*k)
     
@@ -165,24 +167,18 @@ def cusum_test(series):
 # cusum_test(df['value'])
 ```
 
-## Method 4: Multiple Break Detection (ruptures approximation to Bai-Perron)
+## Method 4: Multiple Break Detection via PELT + BIC (Bai-Perron Approximation)
+
+Note: statsmodels does not expose a public Bai-Perron API. The approach below uses
+PELT with a BIC-calibrated penalty as a practical equivalent for selecting the number
+of breaks — consistent with the Bai-Perron (2003) penalized objective.
 
 ```python
 def bai_perron_breaks(series, max_breaks=5):
     """
-    Approximate Bai-Perron-style multiple structural break detection.
-    Uses `ruptures` to estimate the number and dates of breaks jointly.
+    Detect multiple structural breaks using PELT with BIC penalty selection,
+    approximating the Bai-Perron (2003) sequential break-detection framework.
     """
-    from statsmodels.regression.linear_model import OLS
-    import statsmodels.api as sm
-    
-    t = np.arange(len(series))
-    X = sm.add_constant(t)
-    
-    # Fit a simple trend model, then use `ruptures` for breakpoint detection
-    model = OLS(series.values, X)
-    result = model.fit()
-    
     # Use ruptures as an approximation to Bai-Perron
     print("Using PELT (approximate Bai-Perron) to detect up to", max_breaks, "breaks...")
     signal = series.values.reshape(-1, 1)
