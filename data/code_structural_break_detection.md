@@ -165,15 +165,13 @@ def cusum_test(series):
 # cusum_test(df['value'])
 ```
 
-## Method 4: Bai-Perron Multiple Break Test (statsmodels)
+## Method 4: Multiple Break Detection (ruptures approximation to Bai-Perron)
 
 ```python
-from statsmodels.tsa.breakpoint_test import breakpoint_est
-
 def bai_perron_breaks(series, max_breaks=5):
     """
-    Bai-Perron test for multiple structural breaks.
-    Estimates the number and dates of breaks jointly.
+    Approximate Bai-Perron-style multiple structural break detection.
+    Uses `ruptures` to estimate the number and dates of breaks jointly.
     """
     from statsmodels.regression.linear_model import OLS
     import statsmodels.api as sm
@@ -181,7 +179,7 @@ def bai_perron_breaks(series, max_breaks=5):
     t = np.arange(len(series))
     X = sm.add_constant(t)
     
-    # Fit with statsmodels Bai-Perron (available via breakpoint tests)
+    # Fit a simple trend model, then use `ruptures` for breakpoint detection
     model = OLS(series.values, X)
     result = model.fit()
     
