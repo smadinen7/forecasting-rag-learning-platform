@@ -538,11 +538,23 @@ def main():
         recent = load_recent_sessions()
         if recent:
             for s in recent:
-                if st.button(s["title"], key=f"sess_{s['session_id']}"):
-                    restored = load_session(Path(s["path"]))
-                    st.session_state.messages = restored
-                    st.session_state.session_id = s["session_id"]
-                    st.rerun()
+                col_title, col_del = st.columns([5, 1])
+                with col_title:
+                    if st.button(s["title"], key=f"sess_{s['session_id']}"):
+                        restored = load_session(Path(s["path"]))
+                        st.session_state.messages = restored
+                        st.session_state.session_id = s["session_id"]
+                        st.session_state.session_title = s["title"]
+                        st.rerun()
+                with col_del:
+                    if st.button("🗑", key=f"del_{s['session_id']}"):
+                        Path(s["path"]).unlink(missing_ok=True)
+                        # Clear chat if the deleted session is currently loaded
+                        if st.session_state.session_id == s["session_id"]:
+                            st.session_state.messages = []
+                            st.session_state.session_id = _new_session_id()
+                            st.session_state.session_title = ""
+                        st.rerun()
                 st.caption(f"{s['date']} · {s['turn_count']} turn{'s' if s['turn_count'] != 1 else ''}")
         else:
             st.caption("No sessions yet.")
