@@ -178,13 +178,14 @@ def load_recent_sessions() -> list:
             sessions[sid] = {
                 "session_id": sid,
                 "date": ts.strftime("%b %d %H:%M"),
+                "ts": ts,
                 "title": title or "Untitled session",
                 "turn_count": turn_count,
                 "path": str(p),
             }
         except Exception:
             continue
-    return list(sessions.values())[:10]
+    return sorted(sessions.values(), key=lambda s: s["ts"], reverse=True)[:10]
 
 
 # =============================================================================
