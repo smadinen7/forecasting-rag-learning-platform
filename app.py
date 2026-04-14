@@ -17,7 +17,7 @@ from langchain_community.vectorstores import FAISS
 from langchain.schema import Document
 
 import config
-from rerank import rerank, compute_relevance_scores
+from rerank import rerank
 
 
 # =============================================================================
@@ -96,14 +96,17 @@ def generate_session_title(user_msg: str, assistant_msg: str) -> str:
         return (user_msg[:45].rstrip() + "...") if len(user_msg) > 45 else user_msg
 
 
-def save_session(session_id: str, messages: list, title: str = ""):
+def save_session(session_id: str, messages: list, title: str = "", date_str: str = ""):
     """
     Overwrite the session file with all messages so the full conversation
     can be restored. A 'meta' entry at the top stores the session title.
+    date_str should be the session START date so cross-midnight chats stay
+    in one file.
     """
     if not messages:
         return
-    date_str = datetime.now().strftime("%Y%m%d")
+    if not date_str:
+        date_str = datetime.now().strftime("%Y%m%d")
     path = config.SESSIONS_DIR / f"{date_str}_{session_id}.jsonl"
     with open(path, "w", encoding="utf-8") as f:
         f.write(json.dumps({
@@ -118,7 +121,8 @@ def save_session(session_id: str, messages: list, title: str = ""):
                 "session_id": session_id,
                 "role": msg["role"],
                 "content": msg["content"],
-                "sources": [d.metadata.get("source", "?") for d in msg.get("docs", [])],
+                "sources": [d.metadata.get("source", "?") for d in msg.get("docs", [])]
+                           or msg.get("sources", []),
             }) + "\n")
 
 
@@ -168,6 +172,7 @@ def load_recent_sessions() -> list:
             sessions.append({
                 "session_id": sid,
                 "date": ts.strftime("%b %d %H:%M"),
+                "date_str": ts.strftime("%Y%m%d"),
                 "ts": ts,
                 "title": title or "Untitled session",
                 "turn_count": sum(1 for ln in lines if ln.get("role") == "assistant"),
@@ -353,17 +358,22 @@ def compute_analytics() -> Dict[str, Any]:
         }
 
     total = len(interactions)
-    helpful_rate = sum(
-        1 for x in interactions if x.get("survey", {}) and x["survey"].get("helpful") == "Yes"
-    ) / total
+    survey_entries = [x for x in interactions if x.get("survey")]
 
-    novelties = [x["survey"].get("novelty", 0) for x in interactions if x.get("survey")]
-    avg_novelty = sum(novelties) / len(novelties) if novelties else 0.0
+    if survey_entries:
+        helpful_rate = sum(
+            1 for x in survey_entries if x["survey"].get("helpful") == "Yes"
+        ) / len(survey_entries)
+        novelties = [x["survey"].get("novelty", 0) for x in survey_entries]
+        avg_novelty = sum(novelties) / len(novelties)
+        confidences = [x["survey"].get("confidence", 0) for x in survey_entries]
+        avg_confidence = sum(confidences) / len(confidences)
+    else:
+        helpful_rate = avg_novelty = avg_confidence = None
 
-    confidences = [x["survey"].get("confidence", 0) for x in interactions if x.get("survey")]
-    avg_confidence = sum(confidences) / len(confidences) if confidences else 0.0
-
-    if helpful_rate < 0.6:
+    if helpful_rate is None:
+        next_action = "No feedback collected yet"
+    elif helpful_rate < 0.6:
         next_action = "Review low-helpful queries; add relevant sources or tune prompts"
     elif avg_confidence < 1.0:
         next_action = "Low confidence detected; review answer quality and citations"
@@ -431,6 +441,7 @@ def main():
     st.session_state.setdefault("messages", [])
     st.session_state.setdefault("session_id", _new_session_id())
     st.session_state.setdefault("session_title", "")
+    st.session_state.setdefault("session_date", datetime.now().strftime("%Y%m%d"))
     st.session_state.setdefault("completed_modules", set())
     st.session_state.setdefault("current_path", None)
 
@@ -492,12 +503,14 @@ def main():
             st.session_state.messages = []
             st.session_state.session_id = _new_session_id()
             st.session_state.session_title = ""
+            st.session_state.session_date = datetime.now().strftime("%Y%m%d")
             st.rerun()
 
         st.subheader("📈 Analytics")
         analytics = compute_analytics()
         st.metric("Total Queries", analytics["total_queries"])
-        st.metric("Helpful Rate", f"{analytics['helpful_rate']:.1%}")
+        if analytics["helpful_rate"] is not None:
+            st.metric("Helpful Rate", f"{analytics['helpful_rate']:.1%}")
         if analytics["total_queries"] > 0:
             st.caption(f"💡 {analytics['next_action']}")
 
@@ -513,6 +526,7 @@ def main():
                         st.session_state.messages = load_session(Path(s["path"]))
                         st.session_state.session_id = s["session_id"]
                         st.session_state.session_title = s["title"]
+                        st.session_state.session_date = s["date_str"]
                         load_recent_sessions.clear()
                         st.rerun()
                 with col_del:
@@ -586,6 +600,7 @@ def main():
             st.session_state.session_id,
             st.session_state.messages,
             title=st.session_state.session_title,
+            date_str=st.session_state.session_date,
         )
         load_recent_sessions.clear()
 
