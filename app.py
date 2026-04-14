@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """
 Personal Learning Portal - Streamlit App
-RAG Q&A with Gemini/OpenAI/extractive fallback, modules, paths, micro-survey, analytics
+RAG Q&A with Gemini/OpenAI/extractive fallback, multi-turn chat, session history,
+modules, paths, and analytics.
 """
 import json
+import uuid
 import hashlib
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -19,20 +21,90 @@ from rerank import rerank, compute_relevance_scores
 
 
 # =============================================================================
+# SESSION HELPERS
+# =============================================================================
+
+def _new_session_id() -> str:
+    return uuid.uuid4().hex[:8]
+
+
+def build_prior_context(messages: list, max_turns: int) -> str:
+    """Return last max_turns Q&A pairs as a formatted string for the LLM prompt."""
+    qa_messages = [m for m in messages if m["role"] in ("user", "assistant")]
+    tail = qa_messages[-(max_turns * 2):]
+    if not tail:
+        return ""
+    lines = ["Prior conversation:"]
+    for m in tail:
+        label = "User" if m["role"] == "user" else "Assistant"
+        lines.append(f"{label}: {m['content']}")
+    return "\n".join(lines)
+
+
+def save_session(session_id: str, messages: list):
+    """Append the latest assistant turn to the per-session JSONL file."""
+    if not messages or messages[-1]["role"] != "assistant":
+        return
+    date_str = datetime.now().strftime("%Y%m%d")
+    path = config.SESSIONS_DIR / f"{date_str}_{session_id}.jsonl"
+    last_msg = messages[-1]
+    entry = {
+        "timestamp": datetime.now().isoformat(),
+        "session_id": session_id,
+        "role": last_msg["role"],
+        "content": last_msg["content"],
+        "sources": [d.metadata.get("source", "?") for d in last_msg.get("docs", [])],
+        "turn": len([m for m in messages if m["role"] == "assistant"]),
+    }
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(entry) + "\n")
+
+
+def load_recent_sessions() -> list:
+    """Return metadata list for sessions from the last 7 days."""
+    cutoff = datetime.now() - timedelta(days=7)
+    sessions = {}
+    for p in sorted(config.SESSIONS_DIR.glob("*.jsonl"), reverse=True):
+        try:
+            with open(p, "r", encoding="utf-8") as f:
+                lines = [json.loads(line) for line in f if line.strip()]
+            if not lines:
+                continue
+            ts = datetime.fromisoformat(lines[0]["timestamp"])
+            if ts < cutoff:
+                continue
+            sid = lines[0]["session_id"]
+            first_content = next(
+                (ln["content"] for ln in lines if ln.get("role") == "assistant"), "?"
+            )
+            sessions[sid] = {
+                "session_id": sid,
+                "date": ts.strftime("%b %d"),
+                "first_query": first_content,
+                "turn_count": len(lines),
+            }
+        except Exception:
+            continue
+    return list(sessions.values())[:10]
+
+
+# =============================================================================
 # LLM PROVIDERS
 # =============================================================================
 
-def answer_with_gemini(query: str, context_docs: List[Document]) -> Tuple[str, bool]:
+def answer_with_gemini(
+    query: str, context_docs: List[Document], prior_context: str = ""
+) -> Tuple[str, bool]:
     """Generate answer using Gemini API."""
     try:
         import google.generativeai as genai
-        
+
         if not config.GEMINI_API_KEY:
             return "", False
-        
+
         genai.configure(api_key=config.GEMINI_API_KEY)
         model = genai.GenerativeModel(config.GEMINI_MODEL)
-        
+
         # Build context string with citations
         context_parts = []
         for i, doc in enumerate(context_docs[:config.TOP_K], 1):
@@ -41,75 +113,76 @@ def answer_with_gemini(query: str, context_docs: List[Document]) -> Tuple[str, b
             context_parts.append(f"[{i}] Source: {source}\n{content}")
 
         context_str = "\n\n".join(context_parts)
+        prior_block = f"\n{prior_context}\n" if prior_context else ""
 
-        # Construct prompt
         prompt = f"""{config.SYSTEM_PROMPT}
-
+{prior_block}
 QUERY: {query}
 
 CONTEXT:
 {context_str}
 
 Provide a concise answer with citations [1], [2], etc."""
-        
-        # Generate
+
         response = model.generate_content(
             prompt,
             generation_config=genai.GenerationConfig(
                 temperature=config.TEMPERATURE,
                 max_output_tokens=config.MAX_TOKENS,
-            )
+            ),
         )
-        
-        answer = response.text.strip()
-        return answer, True
-        
+
+        return response.text.strip(), True
+
     except Exception as e:
         st.error(f"Gemini API error: {e}")
         return "", False
 
 
-def answer_with_openai(query: str, context_docs: List[Document]) -> Tuple[str, bool]:
+def answer_with_openai(
+    query: str, context_docs: List[Document], prior_context: str = ""
+) -> Tuple[str, bool]:
     """Generate answer using OpenAI API."""
     try:
         from openai import OpenAI
-        
+
         if not config.OPENAI_API_KEY:
             return "", False
-        
+
         client = OpenAI(api_key=config.OPENAI_API_KEY)
-        
+
         # Build context string with citations
         context_parts = []
         for i, doc in enumerate(context_docs[:config.TOP_K], 1):
             source = doc.metadata.get("source", "Unknown")
             content = doc.page_content
             context_parts.append(f"[{i}] Source: {source}\n{content}")
-        
+
         context_str = "\n\n".join(context_parts)
-        
-        # Construct messages
+        prior_block = f"\n{prior_context}\n" if prior_context else ""
+
         messages = [
             {"role": "system", "content": config.SYSTEM_PROMPT},
-            {"role": "user", "content": f"""QUERY: {query}
+            {
+                "role": "user",
+                "content": f"""{prior_block}QUERY: {query}
 
 CONTEXT:
 {context_str}
 
-Provide a concise answer with citations [1], [2], etc."""}
+Provide a concise answer with citations [1], [2], etc.""",
+            },
         ]
-        
-        # Generate
+
         response = client.chat.completions.create(
             model=config.OPENAI_MODEL,
             messages=messages,
             temperature=config.TEMPERATURE,
             max_tokens=config.MAX_TOKENS,
         )
-        
-        answer = response.choices[0].message.content.strip()
-        return answer, True
-        
+
+        return response.choices[0].message.content.strip(), True
+
     except Exception as e:
         st.error(f"OpenAI API error: {e}")
         return "", False
@@ -124,48 +197,52 @@ def answer_extractive(context_docs: List[Document]) -> str:
         if len(doc.page_content) > 300:
             snippet += "..."
         bullets.append(f"**[{i}] {source}**\n{snippet}")
-    
     return "\n\n".join(bullets)
 
 
-def generate_answer(query: str, context_docs: List[Document]) -> Tuple[str, str]:
+def generate_answer(
+    query: str, context_docs: List[Document], prior_context: str = ""
+) -> Tuple[str, str]:
     """
     Generate answer using configured provider (Gemini/OpenAI/extractive).
-    
+
     Returns:
         (answer, provider_used)
     """
     if config.PROVIDER == "gemini" and config.GEMINI_API_KEY:
-        answer, success = answer_with_gemini(query, context_docs)
+        answer, success = answer_with_gemini(query, context_docs, prior_context)
         if success:
             return answer, "gemini"
-    
+
     if config.PROVIDER == "openai" and config.OPENAI_API_KEY:
-        answer, success = answer_with_openai(query, context_docs)
+        answer, success = answer_with_openai(query, context_docs, prior_context)
         if success:
             return answer, "openai"
-    
+
     # Try OpenAI as fallback if Gemini was requested but failed
     if config.PROVIDER == "gemini" and config.OPENAI_API_KEY:
-        answer, success = answer_with_openai(query, context_docs)
+        answer, success = answer_with_openai(query, context_docs, prior_context)
         if success:
             return answer, "openai (fallback)"
-    
-    # Extractive fallback
-    answer = answer_extractive(context_docs)
-    return answer, "extractive"
+
+    return answer_extractive(context_docs), "extractive"
 
 
 # =============================================================================
 # LOGGING
 # =============================================================================
 
-def log_interaction(query: str, answer: str, docs: List[Document], 
-                    provider: str, survey_data: Optional[Dict] = None):
+def log_interaction(
+    query: str,
+    answer: str,
+    docs: List[Document],
+    provider: str,
+    survey_data: Optional[Dict] = None,
+):
     """Log interaction to JSONL file."""
     timestamp = datetime.now().isoformat()
     date_str = datetime.now().strftime("%Y%m%d")
-    
+
     log_entry = {
         "timestamp": timestamp,
         "query": query,
@@ -175,9 +252,9 @@ def log_interaction(query: str, answer: str, docs: List[Document],
         "use_reranker": config.USE_RERANKER,
         "config_hash": hashlib.md5(str(config.__dict__).encode()).hexdigest()[:8],
         "sources": [doc.metadata.get("source", "Unknown") for doc in docs[:config.TOP_K]],
-        "survey": survey_data
+        "survey": survey_data,
     }
-    
+
     log_file = config.LOGS_DIR / f"run_{date_str}.jsonl"
     with open(log_file, "a", encoding="utf-8") as f:
         f.write(json.dumps(log_entry) + "\n")
@@ -190,7 +267,7 @@ def log_interaction(query: str, answer: str, docs: List[Document],
 def compute_analytics() -> Dict[str, Any]:
     """Compute weekly analytics from logs."""
     cutoff_date = datetime.now() - timedelta(days=config.ANALYTICS_WINDOW_DAYS)
-    
+
     interactions = []
     for log_file in config.LOGS_DIR.glob("run_*.jsonl"):
         with open(log_file, "r", encoding="utf-8") as f:
@@ -199,41 +276,45 @@ def compute_analytics() -> Dict[str, Any]:
                 entry_date = datetime.fromisoformat(entry["timestamp"])
                 if entry_date >= cutoff_date:
                     interactions.append(entry)
-    
+
     if not interactions:
         return {
             "helpful_rate": 0.0,
             "avg_novelty": 0.0,
             "avg_confidence": 0.0,
             "total_queries": 0,
-            "next_action": "Submit queries to collect data"
+            "next_action": "Submit queries to collect data",
         }
-    
-    # Compute metrics
+
     total = len(interactions)
-    helpful_count = sum(1 for x in interactions if x.get("survey", {}).get("helpful") == "Yes")
+    helpful_count = sum(
+        1 for x in interactions if x.get("survey", {}) and x["survey"].get("helpful") == "Yes"
+    )
     helpful_rate = helpful_count / total if total > 0 else 0.0
-    
-    novelties = [x.get("survey", {}).get("novelty", 0) for x in interactions if x.get("survey")]
+
+    novelties = [
+        x["survey"].get("novelty", 0) for x in interactions if x.get("survey")
+    ]
     avg_novelty = sum(novelties) / len(novelties) if novelties else 0.0
-    
-    confidences = [x.get("survey", {}).get("confidence", 0) for x in interactions if x.get("survey")]
+
+    confidences = [
+        x["survey"].get("confidence", 0) for x in interactions if x.get("survey")
+    ]
     avg_confidence = sum(confidences) / len(confidences) if confidences else 0.0
-    
-    # Suggest next action
+
     if helpful_rate < 0.6:
         next_action = "Review low-helpful queries; add relevant sources or tune prompts"
     elif avg_confidence < 1.0:
         next_action = "Low confidence detected; review answer quality and citations"
     else:
         next_action = "Performance stable; continue monitoring and expand corpus"
-    
+
     return {
         "helpful_rate": helpful_rate,
         "avg_novelty": avg_novelty,
         "avg_confidence": avg_confidence,
         "total_queries": total,
-        "next_action": next_action
+        "next_action": next_action,
     }
 
 
@@ -245,20 +326,20 @@ def load_vectorstore() -> Optional[FAISS]:
     """Load FAISS index."""
     if not config.FAISS_INDEX_PATH.exists():
         return None
-    
+
     embeddings = HuggingFaceEmbeddings(
         model_name=config.EMBEDDING_MODEL,
         model_kwargs={"device": "cpu"},
-        encode_kwargs={"normalize_embeddings": True}
+        encode_kwargs={"normalize_embeddings": True},
     )
-    
+
     vectorstore = FAISS.load_local(
         str(config.FAISS_INDEX_PATH),
         embeddings,
         index_name="faiss_index",
-        allow_dangerous_deserialization=True
+        allow_dangerous_deserialization=True,
     )
-    
+
     return vectorstore
 
 
@@ -266,200 +347,177 @@ def main():
     st.set_page_config(
         page_title="Personal Learning Portal",
         page_icon="📚",
-        layout="wide"
+        layout="wide",
     )
-    
+
     st.title("📚 Personal Learning Portal")
     st.caption("Corporate Forecasting & Structural Breaks")
-    
-    # Initialize session state
-    if "completed_modules" not in st.session_state:
-        st.session_state.completed_modules = set()
-    if "current_path" not in st.session_state:
-        st.session_state.current_path = None
-    if "show_survey" not in st.session_state:
-        st.session_state.show_survey = False
-    if "last_answer" not in st.session_state:
-        st.session_state.last_answer = None
-    if "last_docs" not in st.session_state:
-        st.session_state.last_docs = []
-    if "last_query" not in st.session_state:
-        st.session_state.last_query = ""
-    if "last_provider" not in st.session_state:
-        st.session_state.last_provider = ""
-    
-    # Load vectorstore
+
+    # -------------------------------------------------------------------------
+    # Session state init
+    # -------------------------------------------------------------------------
+    st.session_state.setdefault("messages", [])
+    st.session_state.setdefault("session_id", _new_session_id())
+    st.session_state.setdefault("completed_modules", set())
+    st.session_state.setdefault("current_path", None)
+
+    # Load vectorstore once per session
     vectorstore = load_vectorstore()
-    
-    # =============================================================================
-    # SIDEBAR: Modules, Paths, Progress
-    # =============================================================================
+
+    # =========================================================================
+    # SIDEBAR
+    # =========================================================================
     with st.sidebar:
         st.header("🎯 Learning Modules")
-        
-        # Module checkboxes (gated)
+
         for module in config.MODULES:
             completed = module in st.session_state.completed_modules
             if st.checkbox(f"{module}", value=completed, key=f"module_{module}"):
                 st.session_state.completed_modules.add(module)
             elif module in st.session_state.completed_modules:
                 st.session_state.completed_modules.remove(module)
-        
-        # Progress bar
+
         progress = len(st.session_state.completed_modules) / len(config.MODULES)
         st.progress(progress)
-        st.caption(f"{len(st.session_state.completed_modules)}/{len(config.MODULES)} modules completed")
-        
+        st.caption(
+            f"{len(st.session_state.completed_modules)}/{len(config.MODULES)} modules completed"
+        )
+
         st.divider()
-        
-        # Learning paths
+
         st.header("🗺️ Learning Paths")
         path_options = ["None"] + list(config.PATHS.keys())
         selected_path = st.selectbox(
             "Select Path",
             path_options,
-            index=0 if st.session_state.current_path is None else path_options.index(st.session_state.current_path)
+            index=(
+                0
+                if st.session_state.current_path is None
+                else path_options.index(st.session_state.current_path)
+            ),
         )
-        
+
         if selected_path != "None":
             st.session_state.current_path = selected_path
             path_info = config.PATHS[selected_path]
             st.info(f"**{selected_path}**\n\n{path_info['description']}")
-            
             required = path_info["required_modules"]
             st.caption(f"Required: {', '.join(required)}")
-            
-            path_completed = all(m in st.session_state.completed_modules for m in required)
-            if path_completed:
+            if all(m in st.session_state.completed_modules for m in required):
                 st.success("✅ Path Complete!")
         else:
             st.session_state.current_path = None
-        
+
         st.divider()
-        
-        # Config info
+
         st.caption(f"**Provider:** {config.PROVIDER}")
         st.caption(f"**Reranker:** {'ON' if config.USE_RERANKER else 'OFF'}")
         st.caption(f"**Top-K:** {config.TOP_K}")
-    
-    # =============================================================================
-    # MAIN: RAG Q&A
-    # =============================================================================
-    
+
+        st.divider()
+
+        # New Chat button
+        if st.button("🆕 New Chat"):
+            st.session_state.messages = []
+            st.session_state.session_id = _new_session_id()
+            st.rerun()
+
+        # Analytics summary
+        st.subheader("📈 Analytics")
+        analytics = compute_analytics()
+        st.metric("Total Queries", analytics["total_queries"])
+        st.metric("Helpful Rate", f"{analytics['helpful_rate']:.1%}")
+        if analytics["total_queries"] > 0:
+            st.caption(f"💡 {analytics['next_action']}")
+
+        st.divider()
+
+        # Recent sessions
+        st.subheader("🕐 Recent Sessions")
+        recent = load_recent_sessions()
+        if recent:
+            for s in recent:
+                st.caption(f"**{s['date']}** ({s['turn_count']} turns)")
+                st.caption(f"_{s['first_query'][:55]}..._")
+        else:
+            st.caption("No sessions yet.")
+
+    # =========================================================================
+    # MAIN: Chat UI
+    # =========================================================================
+
     if vectorstore is None:
         st.error("⚠️ FAISS index not found. Run `make ingest` first.")
         st.stop()
-    
-    st.header("💬 Ask a Question")
-    
-    query = st.text_input(
-        "Enter your query about forecasting & structural breaks:",
-        placeholder="e.g., What are regime-switching models and when should they be used?"
-    )
-    
-    if st.button("🔍 Search", type="primary"):
-        if not query.strip():
-            st.warning("Please enter a query.")
-        else:
-            with st.spinner("Retrieving and generating answer..."):
-                # Retrieve candidates
-                candidate_docs = vectorstore.similarity_search(query, k=config.K_CANDIDATES)
-                
-                # Optional reranking
-                reranked_docs = rerank(query, candidate_docs)
-                
-                # Generate answer
-                answer, provider = generate_answer(query, reranked_docs)
-                
-                # Store in session for survey
-                st.session_state.last_query = query
-                st.session_state.last_answer = answer
-                st.session_state.last_docs = reranked_docs
-                st.session_state.last_provider = provider
-                st.session_state.show_survey = True
-                
-                # Display answer
-                st.subheader("📝 Answer")
-                st.markdown(answer)
-                st.caption(f"*Provider: {provider}*")
-                
-                # Display citations
-                st.subheader("📚 Sources")
-                for i, doc in enumerate(reranked_docs[:config.TOP_K], 1):
-                    source = doc.metadata.get("source", "Unknown")
-                    snippet = doc.page_content[:200].strip()
-                    if len(doc.page_content) > 200:
-                        snippet += "..."
-                    with st.expander(f"[{i}] {source}"):
+
+    st.header("💬 Ask about Forecasting & Structural Breaks")
+
+    # Render existing conversation
+    for msg in st.session_state.messages:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+            if msg["role"] == "assistant" and msg.get("docs"):
+                with st.expander("Sources"):
+                    for i, doc in enumerate(msg["docs"][:config.TOP_K], 1):
+                        src = doc.metadata.get("source", "?")
+                        snippet = doc.page_content[:250].strip()
+                        if len(doc.page_content) > 250:
+                            snippet += "..."
+                        st.caption(f"**[{i}] {src}**")
                         st.text(snippet)
-    
-    # =============================================================================
-    # MICRO-SURVEY
-    # =============================================================================
-    
-    if st.session_state.show_survey and st.session_state.last_answer:
-        st.divider()
-        st.subheader("📊 Quick Feedback")
-        
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            helpful = st.radio("Helpful?", ["Yes", "No"], key="survey_helpful")
-        
-        with col2:
-            novelty = st.slider("Novelty", 0, 2, 1, key="survey_novelty",
-                               help="0=Known, 1=Somewhat new, 2=Very novel")
-        
-        with col3:
-            confidence = st.slider("Confidence", 0, 2, 1, key="survey_confidence",
-                                  help="0=Low, 1=Medium, 2=High")
-        
-        if st.button("Submit Feedback"):
-            survey_data = {
-                "helpful": helpful,
-                "novelty": novelty,
-                "confidence": confidence
+
+    # Chat input
+    if prompt := st.chat_input("Ask about time series forecasting..."):
+        # Append user message and show it immediately
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+
+        # Retrieve + generate
+        with st.chat_message("assistant"):
+            with st.spinner("Retrieving and generating answer..."):
+                candidate_docs = vectorstore.similarity_search(
+                    prompt, k=config.K_CANDIDATES
+                )
+                reranked_docs = rerank(prompt, candidate_docs)
+                prior_context = build_prior_context(
+                    st.session_state.messages[:-1],  # exclude just-appended user msg
+                    config.MAX_CONV_TURNS,
+                )
+                answer, provider = generate_answer(prompt, reranked_docs, prior_context)
+
+            st.markdown(answer)
+            st.caption(f"*Provider: {provider}*")
+
+            if reranked_docs:
+                with st.expander("Sources"):
+                    for i, doc in enumerate(reranked_docs[:config.TOP_K], 1):
+                        src = doc.metadata.get("source", "?")
+                        snippet = doc.page_content[:250].strip()
+                        if len(doc.page_content) > 250:
+                            snippet += "..."
+                        st.caption(f"**[{i}] {src}**")
+                        st.text(snippet)
+
+        # Persist to session state and disk
+        st.session_state.messages.append(
+            {
+                "role": "assistant",
+                "content": answer,
+                "docs": reranked_docs,
+                "provider": provider,
+                "timestamp": datetime.now().isoformat(),
             }
-            
-            log_interaction(
-                st.session_state.last_query,
-                st.session_state.last_answer,
-                st.session_state.last_docs,
-                st.session_state.last_provider,
-                survey_data
-            )
-            
-            st.success("✅ Feedback recorded!")
-            st.session_state.show_survey = False
-    
-    # =============================================================================
-    # ANALYTICS CARD
-    # =============================================================================
-    
-    st.divider()
-    st.header("📈 Weekly Analytics")
-    
-    analytics = compute_analytics()
-    
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.metric("Helpful Rate", f"{analytics['helpful_rate']:.1%}")
-    
-    with col2:
-        st.metric("Avg Novelty", f"{analytics['avg_novelty']:.1f}/2")
-    
-    with col3:
-        st.metric("Avg Confidence", f"{analytics['avg_confidence']:.1f}/2")
-    
-    with col4:
-        st.metric("Total Queries", analytics['total_queries'])
-    
-    st.info(f"**Next Best Action:** {analytics['next_action']}")
-    
+        )
+        log_interaction(prompt, answer, reranked_docs, provider)
+        save_session(st.session_state.session_id, st.session_state.messages)
+
     # Footer
     st.divider()
-    st.caption("💡 Tip: Complete modules to unlock learning paths. Run `make eval-basic` and `make eval-judge` for detailed metrics.")
+    st.caption(
+        "💡 Tip: Complete modules to unlock learning paths. "
+        "Run `make eval-basic` and `make eval-judge` for detailed metrics."
+    )
 
 
 if __name__ == "__main__":
