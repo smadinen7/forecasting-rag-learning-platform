@@ -156,3 +156,14 @@ PATHS = {
 # ANALYTICS
 # =============================================================================
 ANALYTICS_WINDOW_DAYS = 7  # Weekly analytics window
+
+# =============================================================================
+# CONVERSATIONAL CONTEXT
+# =============================================================================
+MAX_CONV_TURNS = 5  # Q&A pairs injected into LLM prompt as prior context
+
+# =============================================================================
+# SESSION PERSISTENCE
+# =============================================================================
+SESSIONS_DIR = LOGS_DIR / "sessions"
+SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
