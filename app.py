@@ -28,22 +28,44 @@ def _new_session_id() -> str:
     return uuid.uuid4().hex[:8]
 
 
+def _call_llm_simple(prompt: str, max_tokens: int = 20, temperature: float = 0.3) -> str:
+    """Minimal single-turn LLM call (title generation, etc.). Raises on failure."""
+    if config.GEMINI_API_KEY:
+        import google.generativeai as genai
+        genai.configure(api_key=config.GEMINI_API_KEY)
+        resp = genai.GenerativeModel(config.GEMINI_MODEL).generate_content(
+            prompt,
+            generation_config=genai.GenerationConfig(
+                temperature=temperature, max_output_tokens=max_tokens
+            ),
+        )
+        return resp.text.strip().strip('"').strip("'")
+    if config.OPENAI_API_KEY:
+        from openai import OpenAI
+        resp = OpenAI(api_key=config.OPENAI_API_KEY).chat.completions.create(
+            model=config.OPENAI_MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        return resp.choices[0].message.content.strip().strip('"').strip("'")
+    raise RuntimeError("No LLM provider configured")
+
+
 def build_retrieval_query(current_query: str, messages: list) -> str:
     """
     Expand a vague follow-up query with the prior user topic so FAISS retrieves
     the right documents. E.g. 'Show me Python code for that' + prior 'What is GARCH?'
     → 'What is GARCH? Show me Python code for that'.
     """
-    if not messages:
+    last_user = next(
+        (m["content"] for m in reversed(messages) if m["role"] == "user"), None
+    )
+    if last_user is None:
         return current_query
-    prior_user_msgs = [m for m in messages if m["role"] == "user"]
-    if not prior_user_msgs:
-        return current_query
-    last_user = prior_user_msgs[-1]["content"]
     words = current_query.lower().split()
     vague_indicators = {"that", "it", "this", "those", "these", "them"}
-    is_vague = len(words) <= 8 or bool(vague_indicators & set(words[:5]))
-    if is_vague:
+    if len(words) <= 8 or bool(vague_indicators & set(words[:5])):
         return f"{last_user} {current_query}"
     return current_query
 
@@ -65,69 +87,39 @@ def generate_session_title(user_msg: str, assistant_msg: str) -> str:
     """Generate a 4-6 word title for a session using the configured LLM."""
     prompt = (
         "Generate a concise 4-6 word title (no quotes, no punctuation) that "
-        "summarizes what this conversation is about.\n\n"
-        f"User: {user_msg[:300]}\n"
-        f"Assistant: {assistant_msg[:300]}\n\n"
-        "Title:"
+        f"summarizes this conversation.\nUser: {user_msg[:300]}\n"
+        f"Assistant: {assistant_msg[:300]}\nTitle:"
     )
     try:
-        if config.GEMINI_API_KEY:
-            import google.generativeai as genai
-            genai.configure(api_key=config.GEMINI_API_KEY)
-            model = genai.GenerativeModel(config.GEMINI_MODEL)
-            resp = model.generate_content(
-                prompt,
-                generation_config=genai.GenerationConfig(
-                    temperature=0.3, max_output_tokens=20
-                ),
-            )
-            return resp.text.strip().strip('"').strip("'")
-        if config.OPENAI_API_KEY:
-            from openai import OpenAI
-            client = OpenAI(api_key=config.OPENAI_API_KEY)
-            resp = client.chat.completions.create(
-                model=config.OPENAI_MODEL,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.3,
-                max_tokens=20,
-            )
-            return resp.choices[0].message.content.strip().strip('"').strip("'")
+        return _call_llm_simple(prompt)
     except Exception:
-        pass
-    # Fallback: truncate first user message
-    return user_msg[:45].rstrip() + ("..." if len(user_msg) > 45 else "")
+        return (user_msg[:45].rstrip() + "...") if len(user_msg) > 45 else user_msg
 
 
 def save_session(session_id: str, messages: list, title: str = ""):
     """
     Overwrite the session file with all messages so the full conversation
-    can be restored. Saves both user and assistant turns.
-    A 'meta' entry at the top stores the session title.
+    can be restored. A 'meta' entry at the top stores the session title.
     """
     if not messages:
         return
     date_str = datetime.now().strftime("%Y%m%d")
     path = config.SESSIONS_DIR / f"{date_str}_{session_id}.jsonl"
     with open(path, "w", encoding="utf-8") as f:
-        # First line: metadata (title, session_id)
-        meta = {
+        f.write(json.dumps({
             "role": "meta",
             "session_id": session_id,
             "title": title,
             "timestamp": datetime.now().isoformat(),
-        }
-        f.write(json.dumps(meta) + "\n")
+        }) + "\n")
         for msg in messages:
-            entry = {
+            f.write(json.dumps({
                 "timestamp": msg.get("timestamp", datetime.now().isoformat()),
                 "session_id": session_id,
                 "role": msg["role"],
                 "content": msg["content"],
-                "sources": [
-                    d.metadata.get("source", "?") for d in msg.get("docs", [])
-                ],
-            }
-            f.write(json.dumps(entry) + "\n")
+                "sources": [d.metadata.get("source", "?") for d in msg.get("docs", [])],
+            }) + "\n")
 
 
 def load_session(path: Path) -> list:
@@ -150,42 +142,40 @@ def load_session(path: Path) -> list:
     return messages
 
 
+@st.cache_data(ttl=30)
 def load_recent_sessions() -> list:
-    """Return metadata list for sessions from the last 7 days."""
+    """Return metadata list for sessions from the last 7 days, newest first."""
     cutoff = datetime.now() - timedelta(days=7)
-    sessions = {}
-    for p in sorted(config.SESSIONS_DIR.glob("*.jsonl"), reverse=True):
+    sessions = []
+    for p in config.SESSIONS_DIR.glob("*.jsonl"):
         try:
             with open(p, "r", encoding="utf-8") as f:
                 lines = [json.loads(line) for line in f if line.strip()]
             if not lines:
                 continue
-            # Meta entry is always first; fall back if old format
             meta = lines[0] if lines[0].get("role") == "meta" else {}
             ts_str = meta.get("timestamp") or lines[0].get("timestamp", "")
             ts = datetime.fromisoformat(ts_str)
             if ts < cutoff:
                 continue
             sid = meta.get("session_id") or lines[0].get("session_id", "")
-            # Title: from meta, or fall back to first user message
             title = meta.get("title", "")
             if not title:
                 first_user = next(
                     (ln["content"] for ln in lines if ln.get("role") == "user"), ""
                 )
                 title = (first_user[:45] + "...") if len(first_user) > 45 else first_user
-            turn_count = len([ln for ln in lines if ln.get("role") == "assistant"])
-            sessions[sid] = {
+            sessions.append({
                 "session_id": sid,
                 "date": ts.strftime("%b %d %H:%M"),
                 "ts": ts,
                 "title": title or "Untitled session",
-                "turn_count": turn_count,
+                "turn_count": sum(1 for ln in lines if ln.get("role") == "assistant"),
                 "path": str(p),
-            }
+            })
         except Exception:
             continue
-    return sorted(sessions.values(), key=lambda s: s["ts"], reverse=True)[:10]
+    return sorted(sessions, key=lambda s: s["ts"], reverse=True)[:10]
 
 
 # =============================================================================
@@ -205,13 +195,11 @@ def answer_with_gemini(
         genai.configure(api_key=config.GEMINI_API_KEY)
         model = genai.GenerativeModel(config.GEMINI_MODEL)
 
-        # Build context string with citations
         context_parts = []
         for i, doc in enumerate(context_docs[:config.TOP_K], 1):
-            source = doc.metadata.get("source", "Unknown")
-            content = doc.page_content
-            context_parts.append(f"[{i}] Source: {source}\n{content}")
-
+            context_parts.append(
+                f"[{i}] Source: {doc.metadata.get('source', 'Unknown')}\n{doc.page_content}"
+            )
         context_str = "\n\n".join(context_parts)
         prior_block = f"\n{prior_context}\n" if prior_context else ""
 
@@ -231,7 +219,6 @@ Provide a concise answer with citations [1], [2], etc."""
                 max_output_tokens=config.MAX_TOKENS,
             ),
         )
-
         return response.text.strip(), True
 
     except Exception as e:
@@ -249,38 +236,28 @@ def answer_with_openai(
         if not config.OPENAI_API_KEY:
             return "", False
 
-        client = OpenAI(api_key=config.OPENAI_API_KEY)
-
-        # Build context string with citations
         context_parts = []
         for i, doc in enumerate(context_docs[:config.TOP_K], 1):
-            source = doc.metadata.get("source", "Unknown")
-            content = doc.page_content
-            context_parts.append(f"[{i}] Source: {source}\n{content}")
-
+            context_parts.append(
+                f"[{i}] Source: {doc.metadata.get('source', 'Unknown')}\n{doc.page_content}"
+            )
         context_str = "\n\n".join(context_parts)
         prior_block = f"\n{prior_context}\n" if prior_context else ""
 
-        messages = [
-            {"role": "system", "content": config.SYSTEM_PROMPT},
-            {
-                "role": "user",
-                "content": f"""{prior_block}QUERY: {query}
+        response = OpenAI(api_key=config.OPENAI_API_KEY).chat.completions.create(
+            model=config.OPENAI_MODEL,
+            messages=[
+                {"role": "system", "content": config.SYSTEM_PROMPT},
+                {"role": "user", "content": f"""{prior_block}QUERY: {query}
 
 CONTEXT:
 {context_str}
 
-Provide a concise answer with citations [1], [2], etc.""",
-            },
-        ]
-
-        response = client.chat.completions.create(
-            model=config.OPENAI_MODEL,
-            messages=messages,
+Provide a concise answer with citations [1], [2], etc."""},
+            ],
             temperature=config.TEMPERATURE,
             max_tokens=config.MAX_TOKENS,
         )
-
         return response.choices[0].message.content.strip(), True
 
     except Exception as e:
@@ -292,23 +269,17 @@ def answer_extractive(context_docs: List[Document]) -> str:
     """Fallback: extractive bullet points from top chunks."""
     bullets = []
     for i, doc in enumerate(context_docs[:config.TOP_K], 1):
-        source = doc.metadata.get("source", "Unknown")
         snippet = doc.page_content[:300].strip()
         if len(doc.page_content) > 300:
             snippet += "..."
-        bullets.append(f"**[{i}] {source}**\n{snippet}")
+        bullets.append(f"**[{i}] {doc.metadata.get('source', 'Unknown')}**\n{snippet}")
     return "\n\n".join(bullets)
 
 
 def generate_answer(
     query: str, context_docs: List[Document], prior_context: str = ""
 ) -> Tuple[str, str]:
-    """
-    Generate answer using configured provider (Gemini/OpenAI/extractive).
-
-    Returns:
-        (answer, provider_used)
-    """
+    """Route to Gemini/OpenAI/extractive. Returns (answer, provider_used)."""
     if config.PROVIDER == "gemini" and config.GEMINI_API_KEY:
         answer, success = answer_with_gemini(query, context_docs, prior_context)
         if success:
@@ -319,7 +290,7 @@ def generate_answer(
         if success:
             return answer, "openai"
 
-    # Try OpenAI as fallback if Gemini was requested but failed
+    # OpenAI fallback when Gemini is configured but failed
     if config.PROVIDER == "gemini" and config.OPENAI_API_KEY:
         answer, success = answer_with_openai(query, context_docs, prior_context)
         if success:
@@ -340,11 +311,9 @@ def log_interaction(
     survey_data: Optional[Dict] = None,
 ):
     """Log interaction to JSONL file."""
-    timestamp = datetime.now().isoformat()
     date_str = datetime.now().strftime("%Y%m%d")
-
     log_entry = {
-        "timestamp": timestamp,
+        "timestamp": datetime.now().isoformat(),
         "query": query,
         "answer": answer,
         "provider": provider,
@@ -354,9 +323,7 @@ def log_interaction(
         "sources": [doc.metadata.get("source", "Unknown") for doc in docs[:config.TOP_K]],
         "survey": survey_data,
     }
-
-    log_file = config.LOGS_DIR / f"run_{date_str}.jsonl"
-    with open(log_file, "a", encoding="utf-8") as f:
+    with open(config.LOGS_DIR / f"run_{date_str}.jsonl", "a", encoding="utf-8") as f:
         f.write(json.dumps(log_entry) + "\n")
 
 
@@ -364,17 +331,16 @@ def log_interaction(
 # ANALYTICS
 # =============================================================================
 
+@st.cache_data(ttl=300)
 def compute_analytics() -> Dict[str, Any]:
-    """Compute weekly analytics from logs."""
+    """Compute weekly analytics from logs (cached 5 min)."""
     cutoff_date = datetime.now() - timedelta(days=config.ANALYTICS_WINDOW_DAYS)
-
     interactions = []
     for log_file in config.LOGS_DIR.glob("run_*.jsonl"):
         with open(log_file, "r", encoding="utf-8") as f:
             for line in f:
                 entry = json.loads(line)
-                entry_date = datetime.fromisoformat(entry["timestamp"])
-                if entry_date >= cutoff_date:
+                if datetime.fromisoformat(entry["timestamp"]) >= cutoff_date:
                     interactions.append(entry)
 
     if not interactions:
@@ -387,19 +353,14 @@ def compute_analytics() -> Dict[str, Any]:
         }
 
     total = len(interactions)
-    helpful_count = sum(
+    helpful_rate = sum(
         1 for x in interactions if x.get("survey", {}) and x["survey"].get("helpful") == "Yes"
-    )
-    helpful_rate = helpful_count / total if total > 0 else 0.0
+    ) / total
 
-    novelties = [
-        x["survey"].get("novelty", 0) for x in interactions if x.get("survey")
-    ]
+    novelties = [x["survey"].get("novelty", 0) for x in interactions if x.get("survey")]
     avg_novelty = sum(novelties) / len(novelties) if novelties else 0.0
 
-    confidences = [
-        x["survey"].get("confidence", 0) for x in interactions if x.get("survey")
-    ]
+    confidences = [x["survey"].get("confidence", 0) for x in interactions if x.get("survey")]
     avg_confidence = sum(confidences) / len(confidences) if confidences else 0.0
 
     if helpful_rate < 0.6:
@@ -422,25 +383,39 @@ def compute_analytics() -> Dict[str, Any]:
 # STREAMLIT APP
 # =============================================================================
 
+@st.cache_resource
 def load_vectorstore() -> Optional[FAISS]:
-    """Load FAISS index."""
+    """Load FAISS index (cached for the process lifetime)."""
     if not config.FAISS_INDEX_PATH.exists():
         return None
-
     embeddings = HuggingFaceEmbeddings(
         model_name=config.EMBEDDING_MODEL,
         model_kwargs={"device": "cpu"},
         encode_kwargs={"normalize_embeddings": True},
     )
-
-    vectorstore = FAISS.load_local(
+    return FAISS.load_local(
         str(config.FAISS_INDEX_PATH),
         embeddings,
         index_name="faiss_index",
         allow_dangerous_deserialization=True,
     )
 
-    return vectorstore
+
+def _render_sources(docs: List[Document], sources: List[str]) -> None:
+    """Render a Sources expander from either full Document objects or filename strings."""
+    items = docs[:config.TOP_K] if docs else sources[:config.TOP_K]
+    if not items:
+        return
+    with st.expander("Sources"):
+        for i, item in enumerate(items, 1):
+            if isinstance(item, Document):
+                snippet = item.page_content[:250].strip()
+                if len(item.page_content) > 250:
+                    snippet += "..."
+                st.caption(f"**[{i}] {item.metadata.get('source', '?')}**")
+                st.text(snippet)
+            else:
+                st.caption(f"**[{i}] {item}**")
 
 
 def main():
@@ -453,16 +428,12 @@ def main():
     st.title("📚 Personal Learning Portal")
     st.caption("Corporate Forecasting & Structural Breaks")
 
-    # -------------------------------------------------------------------------
-    # Session state init
-    # -------------------------------------------------------------------------
     st.session_state.setdefault("messages", [])
     st.session_state.setdefault("session_id", _new_session_id())
     st.session_state.setdefault("session_title", "")
     st.session_state.setdefault("completed_modules", set())
     st.session_state.setdefault("current_path", None)
 
-    # Load vectorstore once per session
     vectorstore = load_vectorstore()
 
     # =========================================================================
@@ -517,14 +488,12 @@ def main():
 
         st.divider()
 
-        # New Chat button
         if st.button("🆕 New Chat"):
             st.session_state.messages = []
             st.session_state.session_id = _new_session_id()
             st.session_state.session_title = ""
             st.rerun()
 
-        # Analytics summary
         st.subheader("📈 Analytics")
         analytics = compute_analytics()
         st.metric("Total Queries", analytics["total_queries"])
@@ -534,7 +503,6 @@ def main():
 
         st.divider()
 
-        # Recent sessions
         st.subheader("🕐 Recent Sessions")
         recent = load_recent_sessions()
         if recent:
@@ -542,21 +510,23 @@ def main():
                 col_title, col_del = st.columns([5, 1])
                 with col_title:
                     if st.button(s["title"], key=f"sess_{s['session_id']}"):
-                        restored = load_session(Path(s["path"]))
-                        st.session_state.messages = restored
+                        st.session_state.messages = load_session(Path(s["path"]))
                         st.session_state.session_id = s["session_id"]
                         st.session_state.session_title = s["title"]
+                        load_recent_sessions.clear()
                         st.rerun()
                 with col_del:
                     if st.button("🗑", key=f"del_{s['session_id']}"):
                         Path(s["path"]).unlink(missing_ok=True)
-                        # Clear chat if the deleted session is currently loaded
                         if st.session_state.session_id == s["session_id"]:
                             st.session_state.messages = []
                             st.session_state.session_id = _new_session_id()
                             st.session_state.session_title = ""
+                        load_recent_sessions.clear()
                         st.rerun()
-                st.caption(f"{s['date']} · {s['turn_count']} turn{'s' if s['turn_count'] != 1 else ''}")
+                st.caption(
+                    f"{s['date']} · {s['turn_count']} turn{'s' if s['turn_count'] != 1 else ''}"
+                )
         else:
             st.caption("No sessions yet.")
 
@@ -570,35 +540,17 @@ def main():
 
     st.header("💬 Ask about Forecasting & Structural Breaks")
 
-    # Render existing conversation
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
             if msg["role"] == "assistant":
-                # Full docs available (live session)
-                if msg.get("docs"):
-                    with st.expander("Sources"):
-                        for i, doc in enumerate(msg["docs"][:config.TOP_K], 1):
-                            src = doc.metadata.get("source", "?")
-                            snippet = doc.page_content[:250].strip()
-                            if len(doc.page_content) > 250:
-                                snippet += "..."
-                            st.caption(f"**[{i}] {src}**")
-                            st.text(snippet)
-                # Source names only (restored session)
-                elif msg.get("sources"):
-                    with st.expander("Sources"):
-                        for i, src in enumerate(msg["sources"][:config.TOP_K], 1):
-                            st.caption(f"**[{i}] {src}**")
+                _render_sources(msg.get("docs", []), msg.get("sources", []))
 
-    # Chat input
     if prompt := st.chat_input("Ask about time series forecasting..."):
-        # Append user message and show it immediately
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
 
-        # Retrieve + generate
         with st.chat_message("assistant"):
             with st.spinner("Retrieving and generating answer..."):
                 retrieval_query = build_retrieval_query(
@@ -609,43 +561,34 @@ def main():
                 )
                 reranked_docs = rerank(prompt, candidate_docs)
                 prior_context = build_prior_context(
-                    st.session_state.messages[:-1],  # exclude just-appended user msg
+                    st.session_state.messages[:-1],  # excludes just-appended user msg
                     config.MAX_CONV_TURNS,
                 )
                 answer, provider = generate_answer(prompt, reranked_docs, prior_context)
 
             st.markdown(answer)
             st.caption(f"*Provider: {provider}*")
+            _render_sources(reranked_docs, [])
 
-            if reranked_docs:
-                with st.expander("Sources"):
-                    for i, doc in enumerate(reranked_docs[:config.TOP_K], 1):
-                        src = doc.metadata.get("source", "?")
-                        snippet = doc.page_content[:250].strip()
-                        if len(doc.page_content) > 250:
-                            snippet += "..."
-                        st.caption(f"**[{i}] {src}**")
-                        st.text(snippet)
-
-        # Persist to session state and disk
-        st.session_state.messages.append(
-            {
-                "role": "assistant",
-                "content": answer,
-                "docs": reranked_docs,
-                "provider": provider,
-                "timestamp": datetime.now().isoformat(),
-            }
-        )
+        st.session_state.messages.append({
+            "role": "assistant",
+            "content": answer,
+            "docs": reranked_docs,
+            "provider": provider,
+            "timestamp": datetime.now().isoformat(),
+        })
         log_interaction(prompt, answer, reranked_docs, provider)
-        # Generate title on first turn only; reuse stored title on subsequent turns
-        is_first_turn = len([m for m in st.session_state.messages if m["role"] == "assistant"]) == 1
-        if is_first_turn:
-            st.session_state.session_title = generate_session_title(prompt, answer)
-        title = st.session_state.get("session_title", "")
-        save_session(st.session_state.session_id, st.session_state.messages, title=title)
 
-    # Footer
+        # Title generated once on the first turn, reused on subsequent turns
+        if sum(1 for m in st.session_state.messages if m["role"] == "assistant") == 1:
+            st.session_state.session_title = generate_session_title(prompt, answer)
+        save_session(
+            st.session_state.session_id,
+            st.session_state.messages,
+            title=st.session_state.session_title,
+        )
+        load_recent_sessions.clear()
+
     st.divider()
     st.caption(
         "💡 Tip: Complete modules to unlock learning paths. "

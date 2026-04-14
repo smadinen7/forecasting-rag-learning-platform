@@ -73,16 +73,24 @@ Target metric: Recall@5 ≥ 0.80 (currently at 0.88).
 
 ---
 
-### In Progress
-- [ ] feat/conversational-chat — multi-turn chat UI + session history
+### Completed This Session
+- [x] feat/conversational-chat — multi-turn chat UI + session history
+  - [x] Replace search box with `st.chat_input` / `st.chat_message` thread
+  - [x] Prior context injected into LLM prompt (last 5 Q&A turns)
+  - [x] Retrieval query expansion for vague follow-ups ("show me code for that")
+  - [x] Session persistence to `logs/sessions/{date}_{id}.jsonl`
+  - [x] Auto-generated LLM session titles after first turn
+  - [x] Sidebar: New Chat, Recent Sessions (clickable restore + delete), sorted newest-first
+  - [x] /simplify pass: extracted `_call_llm_simple`, `_render_sources`, cached analytics + vectorstore, removed dict dedup
 
 ---
 
 ## Current State
-- **Branch:** `feat/conversational-chat`
+- **Branch:** `feat/conversational-chat` (ready for PR)
 - **Recall@5:** 0.88
 - **Chunks:** 795
 - **Embedding model:** `sentence-transformers/all-MiniLM-L6-v2`
 - **LLM:** `gemini-3.1-flash-lite-preview`
 - **Index location:** `index/faiss_index/`
 - **Chat:** Multi-turn `st.chat_input` UI; session history in `logs/sessions/`
+- **Next branch:** TBD (embedding upgrade, eval expansion, or UX improvements)
