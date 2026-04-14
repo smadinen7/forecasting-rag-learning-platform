@@ -28,6 +28,26 @@ def _new_session_id() -> str:
     return uuid.uuid4().hex[:8]
 
 
+def build_retrieval_query(current_query: str, messages: list) -> str:
+    """
+    Expand a vague follow-up query with the prior user topic so FAISS retrieves
+    the right documents. E.g. 'Show me Python code for that' + prior 'What is GARCH?'
+    → 'What is GARCH? Show me Python code for that'.
+    """
+    if not messages:
+        return current_query
+    prior_user_msgs = [m for m in messages if m["role"] == "user"]
+    if not prior_user_msgs:
+        return current_query
+    last_user = prior_user_msgs[-1]["content"]
+    words = current_query.lower().split()
+    vague_indicators = {"that", "it", "this", "those", "these", "them"}
+    is_vague = len(words) <= 8 or bool(vague_indicators & set(words[:5]))
+    if is_vague:
+        return f"{last_user} {current_query}"
+    return current_query
+
+
 def build_prior_context(messages: list, max_turns: int) -> str:
     """Return last max_turns Q&A pairs as a formatted string for the LLM prompt."""
     qa_messages = [m for m in messages if m["role"] in ("user", "assistant")]
@@ -476,8 +496,11 @@ def main():
         # Retrieve + generate
         with st.chat_message("assistant"):
             with st.spinner("Retrieving and generating answer..."):
+                retrieval_query = build_retrieval_query(
+                    prompt, st.session_state.messages[:-1]
+                )
                 candidate_docs = vectorstore.similarity_search(
-                    prompt, k=config.K_CANDIDATES
+                    retrieval_query, k=config.K_CANDIDATES
                 )
                 reranked_docs = rerank(prompt, candidate_docs)
                 prior_context = build_prior_context(
