@@ -62,22 +62,44 @@ def build_prior_context(messages: list, max_turns: int) -> str:
 
 
 def save_session(session_id: str, messages: list):
-    """Append the latest assistant turn to the per-session JSONL file."""
-    if not messages or messages[-1]["role"] != "assistant":
+    """
+    Overwrite the session file with all messages so the full conversation
+    can be restored. Saves both user and assistant turns.
+    """
+    if not messages:
         return
     date_str = datetime.now().strftime("%Y%m%d")
     path = config.SESSIONS_DIR / f"{date_str}_{session_id}.jsonl"
-    last_msg = messages[-1]
-    entry = {
-        "timestamp": datetime.now().isoformat(),
-        "session_id": session_id,
-        "role": last_msg["role"],
-        "content": last_msg["content"],
-        "sources": [d.metadata.get("source", "?") for d in last_msg.get("docs", [])],
-        "turn": len([m for m in messages if m["role"] == "assistant"]),
-    }
-    with open(path, "a", encoding="utf-8") as f:
-        f.write(json.dumps(entry) + "\n")
+    with open(path, "w", encoding="utf-8") as f:
+        for msg in messages:
+            entry = {
+                "timestamp": msg.get("timestamp", datetime.now().isoformat()),
+                "session_id": session_id,
+                "role": msg["role"],
+                "content": msg["content"],
+                "sources": [
+                    d.metadata.get("source", "?") for d in msg.get("docs", [])
+                ],
+            }
+            f.write(json.dumps(entry) + "\n")
+
+
+def load_session(path: Path) -> list:
+    """Reconstruct message list from a session JSONL file."""
+    messages = []
+    with open(path, "r", encoding="utf-8") as f:
+        for line in f:
+            if not line.strip():
+                continue
+            entry = json.loads(line)
+            messages.append({
+                "role": entry["role"],
+                "content": entry["content"],
+                "docs": [],  # docs not serialized; sources shown as text below
+                "sources": entry.get("sources", []),
+                "timestamp": entry.get("timestamp", ""),
+            })
+    return messages
 
 
 def load_recent_sessions() -> list:
@@ -94,14 +116,17 @@ def load_recent_sessions() -> list:
             if ts < cutoff:
                 continue
             sid = lines[0]["session_id"]
-            first_content = next(
-                (ln["content"] for ln in lines if ln.get("role") == "assistant"), "?"
+            # Show first user message as the session preview
+            first_user = next(
+                (ln["content"] for ln in lines if ln.get("role") == "user"), "?"
             )
+            turn_count = len([ln for ln in lines if ln.get("role") == "assistant"])
             sessions[sid] = {
                 "session_id": sid,
-                "date": ts.strftime("%b %d"),
-                "first_query": first_content,
-                "turn_count": len(lines),
+                "date": ts.strftime("%b %d %H:%M"),
+                "first_query": first_user,
+                "turn_count": turn_count,
+                "path": str(p),
             }
         except Exception:
             continue
@@ -457,8 +482,13 @@ def main():
         recent = load_recent_sessions()
         if recent:
             for s in recent:
-                st.caption(f"**{s['date']}** ({s['turn_count']} turns)")
-                st.caption(f"_{s['first_query'][:55]}..._")
+                label = f"{s['date']} · {s['first_query'][:40]}..."
+                if st.button(label, key=f"sess_{s['session_id']}"):
+                    restored = load_session(Path(s["path"]))
+                    st.session_state.messages = restored
+                    st.session_state.session_id = s["session_id"]
+                    st.rerun()
+                st.caption(f"{s['turn_count']} turn{'s' if s['turn_count'] != 1 else ''}")
         else:
             st.caption("No sessions yet.")
 
@@ -476,15 +506,22 @@ def main():
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
-            if msg["role"] == "assistant" and msg.get("docs"):
-                with st.expander("Sources"):
-                    for i, doc in enumerate(msg["docs"][:config.TOP_K], 1):
-                        src = doc.metadata.get("source", "?")
-                        snippet = doc.page_content[:250].strip()
-                        if len(doc.page_content) > 250:
-                            snippet += "..."
-                        st.caption(f"**[{i}] {src}**")
-                        st.text(snippet)
+            if msg["role"] == "assistant":
+                # Full docs available (live session)
+                if msg.get("docs"):
+                    with st.expander("Sources"):
+                        for i, doc in enumerate(msg["docs"][:config.TOP_K], 1):
+                            src = doc.metadata.get("source", "?")
+                            snippet = doc.page_content[:250].strip()
+                            if len(doc.page_content) > 250:
+                                snippet += "..."
+                            st.caption(f"**[{i}] {src}**")
+                            st.text(snippet)
+                # Source names only (restored session)
+                elif msg.get("sources"):
+                    with st.expander("Sources"):
+                        for i, src in enumerate(msg["sources"][:config.TOP_K], 1):
+                            st.caption(f"**[{i}] {src}**")
 
     # Chat input
     if prompt := st.chat_input("Ask about time series forecasting..."):
