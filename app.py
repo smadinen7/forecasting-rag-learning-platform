@@ -61,16 +61,62 @@ def build_prior_context(messages: list, max_turns: int) -> str:
     return "\n".join(lines)
 
 
-def save_session(session_id: str, messages: list):
+def generate_session_title(user_msg: str, assistant_msg: str) -> str:
+    """Generate a 4-6 word title for a session using the configured LLM."""
+    prompt = (
+        "Generate a concise 4-6 word title (no quotes, no punctuation) that "
+        "summarizes what this conversation is about.\n\n"
+        f"User: {user_msg[:300]}\n"
+        f"Assistant: {assistant_msg[:300]}\n\n"
+        "Title:"
+    )
+    try:
+        if config.GEMINI_API_KEY:
+            import google.generativeai as genai
+            genai.configure(api_key=config.GEMINI_API_KEY)
+            model = genai.GenerativeModel(config.GEMINI_MODEL)
+            resp = model.generate_content(
+                prompt,
+                generation_config=genai.GenerationConfig(
+                    temperature=0.3, max_output_tokens=20
+                ),
+            )
+            return resp.text.strip().strip('"').strip("'")
+        if config.OPENAI_API_KEY:
+            from openai import OpenAI
+            client = OpenAI(api_key=config.OPENAI_API_KEY)
+            resp = client.chat.completions.create(
+                model=config.OPENAI_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3,
+                max_tokens=20,
+            )
+            return resp.choices[0].message.content.strip().strip('"').strip("'")
+    except Exception:
+        pass
+    # Fallback: truncate first user message
+    return user_msg[:45].rstrip() + ("..." if len(user_msg) > 45 else "")
+
+
+def save_session(session_id: str, messages: list, title: str = ""):
     """
     Overwrite the session file with all messages so the full conversation
     can be restored. Saves both user and assistant turns.
+    A 'meta' entry at the top stores the session title.
     """
     if not messages:
         return
     date_str = datetime.now().strftime("%Y%m%d")
     path = config.SESSIONS_DIR / f"{date_str}_{session_id}.jsonl"
     with open(path, "w", encoding="utf-8") as f:
+        # First line: metadata (title, session_id)
+        meta = {
+            "role": "meta",
+            "session_id": session_id,
+            "title": title,
+            "timestamp": datetime.now().isoformat(),
+        }
+        f.write(json.dumps(meta) + "\n")
         for msg in messages:
             entry = {
                 "timestamp": msg.get("timestamp", datetime.now().isoformat()),
@@ -85,17 +131,19 @@ def save_session(session_id: str, messages: list):
 
 
 def load_session(path: Path) -> list:
-    """Reconstruct message list from a session JSONL file."""
+    """Reconstruct message list from a session JSONL file (skips meta entry)."""
     messages = []
     with open(path, "r", encoding="utf-8") as f:
         for line in f:
             if not line.strip():
                 continue
             entry = json.loads(line)
+            if entry.get("role") == "meta":
+                continue
             messages.append({
                 "role": entry["role"],
                 "content": entry["content"],
-                "docs": [],  # docs not serialized; sources shown as text below
+                "docs": [],
                 "sources": entry.get("sources", []),
                 "timestamp": entry.get("timestamp", ""),
             })
@@ -112,19 +160,25 @@ def load_recent_sessions() -> list:
                 lines = [json.loads(line) for line in f if line.strip()]
             if not lines:
                 continue
-            ts = datetime.fromisoformat(lines[0]["timestamp"])
+            # Meta entry is always first; fall back if old format
+            meta = lines[0] if lines[0].get("role") == "meta" else {}
+            ts_str = meta.get("timestamp") or lines[0].get("timestamp", "")
+            ts = datetime.fromisoformat(ts_str)
             if ts < cutoff:
                 continue
-            sid = lines[0]["session_id"]
-            # Show first user message as the session preview
-            first_user = next(
-                (ln["content"] for ln in lines if ln.get("role") == "user"), "?"
-            )
+            sid = meta.get("session_id") or lines[0].get("session_id", "")
+            # Title: from meta, or fall back to first user message
+            title = meta.get("title", "")
+            if not title:
+                first_user = next(
+                    (ln["content"] for ln in lines if ln.get("role") == "user"), ""
+                )
+                title = (first_user[:45] + "...") if len(first_user) > 45 else first_user
             turn_count = len([ln for ln in lines if ln.get("role") == "assistant"])
             sessions[sid] = {
                 "session_id": sid,
                 "date": ts.strftime("%b %d %H:%M"),
-                "first_query": first_user,
+                "title": title or "Untitled session",
                 "turn_count": turn_count,
                 "path": str(p),
             }
@@ -403,6 +457,7 @@ def main():
     # -------------------------------------------------------------------------
     st.session_state.setdefault("messages", [])
     st.session_state.setdefault("session_id", _new_session_id())
+    st.session_state.setdefault("session_title", "")
     st.session_state.setdefault("completed_modules", set())
     st.session_state.setdefault("current_path", None)
 
@@ -465,6 +520,7 @@ def main():
         if st.button("🆕 New Chat"):
             st.session_state.messages = []
             st.session_state.session_id = _new_session_id()
+            st.session_state.session_title = ""
             st.rerun()
 
         # Analytics summary
@@ -482,13 +538,12 @@ def main():
         recent = load_recent_sessions()
         if recent:
             for s in recent:
-                label = f"{s['date']} · {s['first_query'][:40]}..."
-                if st.button(label, key=f"sess_{s['session_id']}"):
+                if st.button(s["title"], key=f"sess_{s['session_id']}"):
                     restored = load_session(Path(s["path"]))
                     st.session_state.messages = restored
                     st.session_state.session_id = s["session_id"]
                     st.rerun()
-                st.caption(f"{s['turn_count']} turn{'s' if s['turn_count'] != 1 else ''}")
+                st.caption(f"{s['date']} · {s['turn_count']} turn{'s' if s['turn_count'] != 1 else ''}")
         else:
             st.caption("No sessions yet.")
 
@@ -570,7 +625,12 @@ def main():
             }
         )
         log_interaction(prompt, answer, reranked_docs, provider)
-        save_session(st.session_state.session_id, st.session_state.messages)
+        # Generate title on first turn only; reuse stored title on subsequent turns
+        is_first_turn = len([m for m in st.session_state.messages if m["role"] == "assistant"]) == 1
+        if is_first_turn:
+            st.session_state.session_title = generate_session_title(prompt, answer)
+        title = st.session_state.get("session_title", "")
+        save_session(st.session_state.session_id, st.session_state.messages, title=title)
 
     # Footer
     st.divider()
