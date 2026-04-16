@@ -46,3 +46,81 @@ queries:
       - "real-time"
       - "dynamic factor"
       - "pandemic"
+
+  # --- Bayesian methods ---
+
+  - id: 6
+    question: "How does Bayesian structural time series work for forecasting?"
+    keywords:
+      - "spike-and-slab"
+      - "causalimpact"
+      - "local linear trend"
+      - "state space"
+      - "bsts"
+
+  - id: 7
+    question: "What is the Minnesota prior in Bayesian VAR models?"
+    keywords:
+      - "minnesota prior"
+      - "shrinkage"
+      - "primiceri"
+      - "time-varying"
+      - "gibbs"
+
+  - id: 8
+    question: "How does Chib's Bayesian approach detect multiple change points?"
+    keywords:
+      - "absorbing"
+      - "forward-backward"
+      - "bayes factor"
+      - "marginal likelihood"
+      - "chib"
+
+  # --- Code retrieval ---
+
+  - id: 9
+    question: "Show me Python code to fit a GARCH model for volatility forecasting"
+    keywords:
+      - "arch_model"
+      - "arch"
+      - "garch"
+      - "volatility"
+      - "conditional variance"
+
+  - id: 10
+    question: "How do I fit an ARIMA model in Python with automatic order selection?"
+    keywords:
+      - "auto_arima"
+      - "pmdarima"
+      - "statsmodels"
+      - "arima"
+      - "aic"
+
+  - id: 11
+    question: "Show Python code for detecting structural breaks in a time series"
+    keywords:
+      - "ruptures"
+      - "pelt"
+      - "bkps"
+      - "cusum"
+      - "breakpoint"
+
+  # --- Trend break detection and correction ---
+
+  - id: 12
+    question: "How do I detect and correct for trend breaks in a time series?"
+    keywords:
+      - "perron"
+      - "zivot-andrews"
+      - "dummy variable"
+      - "unit root"
+      - "piecewise"
+
+  - id: 13
+    question: "What are the main methods for correcting structural breaks before forecasting?"
+    keywords:
+      - "intervention"
+      - "segmented"
+      - "regime"
+      - "break date"
+      - "recursive"

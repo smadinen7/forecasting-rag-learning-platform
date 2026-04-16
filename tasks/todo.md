@@ -51,12 +51,11 @@ Target metric: Recall@5 ≥ 0.80 (currently at 0.88).
 ## Pending
 
 ### High Priority
-- [ ] Merge `feat/code-samples-and-papers` → `main` via PR
-- [ ] Extend `eval/queries.yaml` with new queries covering:
-  - Bayesian methods (BSTS, BVAR, Chib changepoints)
-  - Code retrieval queries ("show Python code for GARCH")
-  - Trend break correction queries
-  - Confirm recall still ≥ 0.80 against expanded query set
+- [x] Extend `eval/queries.yaml` with new queries covering:
+  - Bayesian methods (BSTS, BVAR, Chib changepoints) — queries 6–8
+  - Code retrieval queries ("show Python code for GARCH") — queries 9–11
+  - Trend break correction queries — queries 12–13
+  - Recall@5 = 0.846 on 13 queries (≥ 0.80 ✓) — branch: `feat/eval-expansion`
 
 ### Medium Priority
 - [ ] Add RAGAS evaluation (deferred — user said "keep RAGAS for later")
@@ -86,11 +85,11 @@ Target metric: Recall@5 ≥ 0.80 (currently at 0.88).
 ---
 
 ## Current State
-- **Branch:** `feat/conversational-chat` (ready for PR)
-- **Recall@5:** 0.88
+- **Branch:** `feat/eval-expansion`
+- **Recall@5:** 0.846 (13 queries — Bayesian, code retrieval, trend break added)
 - **Chunks:** 795
 - **Embedding model:** `sentence-transformers/all-MiniLM-L6-v2`
 - **LLM:** `gemini-3.1-flash-lite-preview`
 - **Index location:** `index/faiss_index/`
 - **Chat:** Multi-turn `st.chat_input` UI; session history in `logs/sessions/`
-- **Next branch:** TBD (embedding upgrade, eval expansion, or UX improvements)
+- **Next:** Embedding upgrade (`all-mpnet-base-v2`) or App UX improvements
