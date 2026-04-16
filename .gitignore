@@ -27,8 +27,6 @@ logs/
 .vscode/
 .idea/
 
-# Evaluation results
-eval/results/
 
 # Jupyter
 .ipynb_checkpoints/
