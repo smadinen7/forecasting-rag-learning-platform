@@ -1,7 +1,7 @@
 {
-  "avg_recall_at_5": 0.8,
-  "avg_relevance": 0.408,
-  "num_queries": 5,
+  "avg_recall_at_5": 0.846,
+  "avg_relevance": 0.409,
+  "num_queries": 13,
   "config": {
     "top_k": 7,
     "k_candidates": 20,
@@ -11,16 +11,16 @@
     {
       "query_id": 1,
       "question": "What are the main types of structural breaks in time series?",
-      "recall_at_5": 0.4,
-      "avg_relevance": 0.519,
+      "recall_at_5": 0.8,
+      "avg_relevance": 0.506,
       "top_sources": [
-        "Li_TimeSeriesMomentum.pdf",
-        "Li_TimeSeriesMomentum.pdf",
+        "trend_break_detection_correction.md",
         "Hyndman_FPP3_Reference.md",
         "Timmermann_ModelInstability.pdf",
-        "Timmermann_ModelInstability.pdf",
+        "code_structural_break_detection.md",
         "structural_break_governance_monitoring.md",
-        "Li_TimeSeriesMomentum.pdf"
+        "pesaran_pettenuzzo_timmermann_2006.md",
+        "pesaran_pettenuzzo_timmermann_2006.md"
       ]
     },
     {
@@ -35,21 +35,21 @@
         "markov_regime_switching_models.md",
         "markov_regime_switching_models.md",
         "Timmermann_ModelInstability.pdf",
-        "Lim_TemporalFusionTransformers.pdf"
+        "code_markov_regime_switching.md"
       ]
     },
     {
       "query_id": 3,
       "question": "What evaluation metrics are appropriate for break-aware forecasting?",
       "recall_at_5": 1.0,
-      "avg_relevance": 0.304,
+      "avg_relevance": 0.268,
       "top_sources": [
-        "TaylorLetham_Prophet.pdf",
         "break_adjusted_evaluation_metrics.md",
-        "TaylorLetham_Prophet.pdf",
-        "TaylorLetham_Prophet.pdf",
         "break_adjusted_evaluation_metrics.md",
+        "pesaran_pettenuzzo_timmermann_2006.md",
         "BaiPerron_2003_Reference.md",
+        "TaylorLetham_Prophet.pdf",
+        "TaylorLetham_Prophet.pdf",
         "TaylorLetham_Prophet.pdf"
       ]
     },
@@ -57,15 +57,15 @@
       "query_id": 4,
       "question": "What are the governance considerations for deploying break detection systems?",
       "recall_at_5": 0.8,
-      "avg_relevance": 0.443,
+      "avg_relevance": 0.414,
       "top_sources": [
+        "code_structural_break_detection.md",
+        "code_structural_break_detection.md",
+        "code_structural_break_detection.md",
         "structural_break_governance_monitoring.md",
         "structural_break_governance_monitoring.md",
         "Hyndman_FPP3_Reference.md",
-        "ZhuShasha_StatStream.pdf",
-        "structural_break_governance_monitoring.md",
-        "structural_break_governance_monitoring.md",
-        "break_adjusted_evaluation_metrics.md"
+        "structural_break_governance_monitoring.md"
       ]
     },
     {
@@ -81,6 +81,126 @@
         "Timmermann_ModelInstability.pdf",
         "nowcasting_mixed_frequency_methods.md",
         "Timmermann_ModelInstability.pdf"
+      ]
+    },
+    {
+      "query_id": 6,
+      "question": "How does Bayesian structural time series work for forecasting?",
+      "recall_at_5": 0.6,
+      "avg_relevance": 0.524,
+      "top_sources": [
+        "chib_1998_bayesian_changepoints.md",
+        "bayesian_structural_time_series_bsts.md",
+        "Wickramasuriya_MinT.pdf",
+        "bayesian_structural_time_series_bsts.md",
+        "pesaran_pettenuzzo_timmermann_2006.md",
+        "vector_autoregression_var_models.md",
+        "Oreshkin_NBEATS.pdf"
+      ]
+    },
+    {
+      "query_id": 7,
+      "question": "What is the Minnesota prior in Bayesian VAR models?",
+      "recall_at_5": 0.8,
+      "avg_relevance": 0.476,
+      "top_sources": [
+        "Timmermann_ModelInstability.pdf",
+        "bayesian_var_tvp_var.md",
+        "Google_Correlate.pdf",
+        "Google_Correlate.pdf",
+        "Timmermann_ModelInstability.pdf",
+        "bayesian_var_tvp_var.md",
+        "bayesian_var_tvp_var.md"
+      ]
+    },
+    {
+      "query_id": 8,
+      "question": "How does Chib's Bayesian approach detect multiple change points?",
+      "recall_at_5": 1.0,
+      "avg_relevance": 0.317,
+      "top_sources": [
+        "ZhuShasha_StatStream.pdf",
+        "chib_1998_bayesian_changepoints.md",
+        "chib_1998_bayesian_changepoints.md",
+        "chib_1998_bayesian_changepoints.md",
+        "chib_1998_bayesian_changepoints.md",
+        "ZhuShasha_StatStream.pdf",
+        "ZhuShasha_StatStream.pdf"
+      ]
+    },
+    {
+      "query_id": 9,
+      "question": "Show me Python code to fit a GARCH model for volatility forecasting",
+      "recall_at_5": 1.0,
+      "avg_relevance": 0.369,
+      "top_sources": [
+        "code_garch_models.md",
+        "code_garch_models.md",
+        "code_model_selection_guide.md",
+        "code_garch_models.md",
+        "code_garch_models.md",
+        "code_garch_models.md",
+        "code_markov_regime_switching.md"
+      ]
+    },
+    {
+      "query_id": 10,
+      "question": "How do I fit an ARIMA model in Python with automatic order selection?",
+      "recall_at_5": 1.0,
+      "avg_relevance": 0.341,
+      "top_sources": [
+        "code_model_selection_guide.md",
+        "code_model_selection_guide.md",
+        "classical_time_series_methods.md",
+        "code_arima_sarima.md",
+        "trend_break_detection_correction.md",
+        "code_arima_sarima.md",
+        "code_arima_sarima.md"
+      ]
+    },
+    {
+      "query_id": 11,
+      "question": "Show Python code for detecting structural breaks in a time series",
+      "recall_at_5": 0.6,
+      "avg_relevance": 0.455,
+      "top_sources": [
+        "code_structural_break_detection.md",
+        "Hyndman_FPP3_Reference.md",
+        "code_model_selection_guide.md",
+        "code_structural_break_detection.md",
+        "structural_break_governance_monitoring.md",
+        "change_point_detection_algorithms.md",
+        "pesaran_pettenuzzo_timmermann_2006.md"
+      ]
+    },
+    {
+      "query_id": 12,
+      "question": "How do I detect and correct for trend breaks in a time series?",
+      "recall_at_5": 0.6,
+      "avg_relevance": 0.462,
+      "top_sources": [
+        "Hyndman_FPP3_Reference.md",
+        "ZhuShasha_StatStream.pdf",
+        "trend_break_detection_correction.md",
+        "Hyndman_FPP3_Reference.md",
+        "trend_break_detection_correction.md",
+        "pesaran_pettenuzzo_timmermann_2006.md",
+        "code_structural_break_detection.md"
+      ]
+    },
+    {
+      "query_id": 13,
+      "question": "What are the main methods for correcting structural breaks before forecasting?",
+      "recall_at_5": 1.0,
+      "avg_relevance": 0.416,
+      "top_sources": [
+        "Hyndman_FPP3_Reference.md",
+        "structural_break_governance_monitoring.md",
+        "Hyndman_FPP3_Reference.md",
+        "TaylorLetham_Prophet.pdf",
+        "vector_autoregression_var_models.md",
+        "pesaran_pettenuzzo_timmermann_2006.md",
+        "TaylorLetham_Prophet.pdf"
       ]
     }
   ]
